@@ -1,0 +1,1365 @@
+/* =========================================================================
+   Cove 主题 — Windows 11 Flyout 风格
+   对齐 Win11 日历/通知 flyout：Mica 系统模糊背景（DWM 合成）、统一圆角、
+   任务栏间距由后端 lib.rs 定位保证。
+   系统状态：深色主题 / MicaDark / AccentColor #6d7d91 / 缩放 175%
+   ========================================================================= */
+
+:root {
+    /* Mica 深色半透明叠层 —— 让 DWM 的 Mica 模糊透出来。
+       不再用实色 #2C2C2C（那会完全遮住 Mica），改极轻半透明，
+       模拟 Win11 flyout 在 Mica 之上叠的那层 neutral fill。 */
+    --bg:           rgba(32, 32, 32, 0.55);   /* flyout 主背景（透出 Mica） */
+    --bg-elevated:  rgba(255, 255, 255, 0.06);/* 卡片/悬浮层（Subtle fill） */
+    --bg-solid:     #2C2C2C;                  /* modal 等不透明区域回退色 */
+    --bg-hover:     rgba(255, 255, 255, 0.08);   /* Win hover 叠加 */
+    --bg-active:    rgba(255, 255, 255, 0.04);   /* Win pressed 叠加 */
+    --bg-stroke:    rgba(255, 255, 255, 0.08);   /* Win CardStroke */
+    --bg-stroke-strong: rgba(255, 255, 255, 0.12);
+
+    /* 文字（Win TextFillColor 系列） */
+    --text:        rgba(255, 255, 255, 0.92);   /* primary */
+    --text-dim:    rgba(255, 255, 255, 0.60);   /* secondary */
+    --text-faint:  rgba(255, 255, 255, 0.45);   /* tertiary / disabled-ish */
+
+    /* 强调色 — 提亮增蓝，在 Mica 灰调背景上提供足够的对比锚点
+       （原 #6d7d91 过灰，focus ring / 选中态在半透明背景上辨识度不足） */
+    --accent:        #7AA0D4;
+    --accent-hover:  #8FB2E3;
+    --accent-soft:   rgba(122, 160, 212, 0.20);
+    --accent-border: rgba(122, 160, 212, 0.45);
+
+    /* 状态色（Win SystemFillColor） */
+    --warn:    #E5A33B;
+    --warn-soft: rgba(229, 163, 59, 0.16);
+    --danger:  #E6696B;
+    --danger-soft: rgba(230, 105, 107, 0.15);
+    --success: #6CD0A5;
+
+    /* 圆角 —— 全局统一为 Win11 flyout 标准：窗口 8px，卡片 6px，控件 4px。
+       排查并替换了所有硬编码圆角，统一走这三个变量。 */
+    --radius:    8px;
+    --radius-md: 6px;
+    --radius-sm: 4px;
+    --radius-xs: 3px;
+
+    /* 4px 栅格（Win 间距体系） */
+    --sp-1: 4px;
+    --sp-2: 8px;
+    --sp-3: 12px;
+    --sp-4: 16px;
+    --sp-5: 24px;
+
+    /* 字体 — Win11 flyout 用 Segoe UI Variable，回退 Segoe UI */
+    --font: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI",
+            "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    height: 100%;
+    /* 透明：让窗口的 Mica 效果（DWM 合成）直接透出来。
+       窗口本身 transparent:true，这里 body 不能再铺实色，否则遮住 Mica。 */
+    background: transparent;
+}
+
+body {
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 13px;       /* 窄 flyout 收紧正文，省垂直空间 */
+    line-height: 1.35;
+    overflow: hidden;
+    user-select: none;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* 滚动条：Mica 化——静止近乎隐形，hover 才显现较亮色。
+   对齐 Win11 flyout 滚动条观感，避免 WebView2 默认粗条破坏半透明背景。 */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.10);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.22);
+    background-clip: padding-box;
+}
+::-webkit-scrollbar-corner { background: transparent; }
+
+/* 键盘焦点：全局可见的 focus ring（accent 色），补齐无键盘导航时的可见性 */
+:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+    border-radius: var(--radius-sm);
+}
+button:focus-visible { outline-offset: 1px; }
+
+/* 主容器：Win flyout 实色面板。窗口阴影由系统 drop-shadow 提供，
+   这里只保留极轻的内描边模拟 flyout 边缘。
+   背景用 --bg 半透明叠层透出 Mica；圆角统一 8px（窗口圆角）。 */
+#app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    background: var(--bg);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: inset 0 0 0 1px var(--bg-stroke);
+    position: relative;
+    /* Default to fully shown; .opening/.closing toggle animations. */
+    opacity: 1;
+    transform: none;
+}
+
+/* ===== Flyout open/close animation (Win11 calendar-flyout style) =====
+   Open:   slide up 8px + fade in   (~180ms, spring-ish ease)
+   Close:  slide down 6px + fade out (~140ms, ease-in)
+   The window itself is shown/hidden by Rust; these animate the #app content
+   so the transition feels like the native tray flyout. */
+#app.opening {
+    animation: coveOpen 0.18s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+#app.closing {
+    animation: coveClose 0.14s cubic-bezier(0.4, 0, 1, 1) forwards;
+    pointer-events: none;
+}
+@keyframes coveOpen {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes coveClose {
+    from { opacity: 1; transform: translateY(0); }
+    to   { opacity: 0; transform: translateY(6px); }
+}
+
+.icon {
+    flex-shrink: 0;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+/* ============================ 顶栏 ============================ */
+/* 统一标尺：titlebar 高 34px，左右内边距 sp-3(12px)，元素间距 sp-2(8px)。
+   品牌图标 20×20（略小于行高留呼吸感），与标题基线对齐。
+   原来的 "C" 方块改成真实应用图标的 img，和托盘/exe 图标一致。 */
+.titlebar {
+    height: 36px;
+    padding: 3px var(--sp-3) 0;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    flex-shrink: 0;
+    -webkit-app-region: drag;
+    user-select: none;
+}
+.titlebar-brand {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    /* 等比缩放，保留图标原比例，不裁切 */
+    object-fit: contain;
+    /* 轻微圆角，和应用图标的圆角风格统一 */
+    border-radius: var(--radius-xs);
+    -webkit-user-drag: none;
+    user-select: none;
+    pointer-events: none;
+}
+.titlebar-title {
+    color: var(--text);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 0.1px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.titlebar-model {
+    color: var(--text-dim);
+    font-size: 11px;
+    font-family: var(--mono);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-left: auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex-shrink: 1;
+    min-width: 0;
+    background: var(--bg-elevated);
+    padding: 3px 8px;
+    border-radius: 12px;
+}
+.titlebar-model .model-dot-inner {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--success);
+    flex-shrink: 0;
+}
+
+/* ============================ 内容区 ============================ */
+.content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+}
+
+/* ============================ 滚动区 ============================ */
+.scroll-area {
+    flex: 1;
+    overflow-y: auto;
+    /* top padding 为 0：顶部 sticky 的 section-label 自己负责顶部内边距。
+       若这里留 top padding，sticky 粘顶时 padding 区会透出 Mica 背景，
+       形成"冻结行和上面有一条缝隙"。bottom padding 保留，避免最后一张卡片
+       贴底。 */
+    padding: 0 var(--sp-2) var(--sp-2);
+    min-height: 0;
+    /* 预留滚动条空间：无论内容是否溢出，右侧都固定留出 scrollbar 宽度，
+       避免内容多/少时卡片宽度跳变、左右视觉不对称。 */
+    scrollbar-gutter: stable;
+}
+/* 列表视图的滚动区水平更紧，让窄 flyout 多容纳文字、推迟省略号 */
+.scroll-area.has-list { padding: var(--sp-1) 4px var(--sp-2); }
+.scroll-area::-webkit-scrollbar { width: 6px; }
+.scroll-area::-webkit-scrollbar-track { background: transparent; }
+.scroll-area::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.14);
+    border-radius: 3px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+.scroll-area::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.24); background-clip: padding-box; }
+
+/* ============================ 区段标题 ============================ */
+.section-label {
+    color: var(--text-dim);
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: var(--sp-2) var(--sp-2) var(--sp-1);
+    /* 四页（项目/对话/归档/清理）section-label 必须等高、标题下的横线
+       （border-bottom）位置一致。设 min-height = 按钮高度 24px + 上下
+       padding（8+4=12px）= 36px。这样即使某页右侧没渲染操作按钮（如空
+       归档页），section-label 高度也和有按钮的页面一致，横线不会错位。 */
+    min-height: 36px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    border-bottom: 1px solid var(--bg-stroke);
+    margin-bottom: var(--sp-1);
+    /* 粘性：滚动长列表时分节标签吸顶，提供扫描锚点。
+       背景用 backdrop-blur + 极轻半透明叠层（沿用主背景的 Mica 透出思路），
+       不再用 --bg-solid 实色——那条 #2C2C2C 实色会在半透明窗口上压出
+       明显的灰色横条，破坏整体 Mica 观感。
+       缺点：老版 WebView2（Chromium <76）无 backdrop-filter；含 fallback 实色。 */
+    position: sticky;
+    top: 0;
+    background: rgba(32, 32, 32, 0.78);
+    backdrop-filter: blur(12px) saturate(140%);
+    -webkit-backdrop-filter: blur(12px) saturate(140%);
+    z-index: 2;
+}
+.section-label .icon { color: var(--text-dim); }
+
+/* section-label 右侧的操作按钮（项目页"添加"、散落对话页"新对话"等）：
+   统一标尺——ghost 风格（不抢视觉焦点）、小尺寸、与标题同行右对齐。
+   原来的 btn-accent 蓝色实心太抢眼，压过下方安静的卡片列表。 */
+.section-label .section-action {
+    margin-left: auto;
+    height: 24px;
+    padding: 0 10px;
+    font-size: 11px;
+    border-radius: var(--radius-sm);
+}
+/* nav-bar（项目详情/会话历史 子页面）里的主操作按钮也用同一标尺：
+   之前是 .btn/.btn-accent + 内联 style（蓝色实心/带边框大按钮），
+   和 tab 页 section-label 内的 section-action 风格不一致。统一成 ghost。 */
+.nav-bar .section-action {
+    margin-left: auto;
+    height: 24px;
+    padding: 0 10px;
+    font-size: 11px;
+    border-radius: var(--radius-sm);
+}
+
+/* ============================ 卡片（Win 列表项风格） ============================ */
+/* Win flyout 的项目是"列表项"而非卡片：无背景、整行可点、hover 才出底色。
+   这里用极轻描边保留分区感，圆角 6px。 */
+/* 卡片：默认轻描边以区分列表项（无填充背景，让 Mica 透出）；
+   hover 时描边渐隐、改用 bg-hover 填充，给"可点"反馈。
+   间距标尺：卡片间 margin 6px（呼吸感），内边距 10px 14px（上下/左右
+   不等比，左右更宽，对齐视觉重心）。原来的 1px 间距太挤，卡片像堆叠。 */
+.card {
+    background: transparent;
+    border: 1px solid var(--bg-stroke);
+    border-radius: var(--radius-md);
+    padding: 10px var(--sp-4);
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease;
+    position: relative;
+}
+.card::before { display: none; }   /* 移除旧的左侧光条 */
+.card:hover {
+    background: var(--bg-hover);
+    border-color: var(--bg-stroke-strong);
+}
+.card:active { background: var(--bg-active); }
+.card.is-static { cursor: default; border-color: transparent; }
+.card.is-static:hover { background: transparent; border-color: transparent; }
+
+.card .title {
+    font-weight: 600;
+    font-size: 13.5px;
+    color: var(--text);
+    margin-bottom: 5px;
+    word-break: break-word;
+    line-height: 1.35;
+    letter-spacing: -0.1px;
+}
+.card .meta {
+    color: var(--text-dim);
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-1);
+    flex-wrap: wrap;
+    line-height: 1.45;
+}
+.card .meta .sep { color: var(--text-faint); }
+.card .meta .warn-tag {
+    color: var(--warn);
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+.card .meta .model-tag {
+    color: var(--accent-hover);
+    font-family: var(--mono);
+    font-size: 10.5px;
+}
+.card .meta.path-tag {
+    color: var(--text-faint);
+    font-size: 10.5px;
+    font-family: var(--mono);
+    word-break: break-all;
+    margin-top: 2px;
+}
+
+/* 项目独立页（conversations.ts）的路径操作行：
+   可点击复制的路径 chip + 「打开文件夹」按钮，一行排开。
+   替代原来孤零零的一行灰色路径文字。 */
+.path-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-1) var(--sp-2) var(--sp-2);
+}
+.path-chip {
+    flex: 1;
+    min-width: 0;
+    /* 和右侧「打开文件夹」按钮等高（26px），避免一高一低。
+       box-sizing:border-box 让 padding 算在 height 内，内容垂直居中。 */
+    height: 26px;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 0 var(--sp-2);
+    background: var(--bg-hover);
+    border: 1px solid var(--bg-stroke);
+    border-radius: var(--radius-sm);
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    cursor: pointer;
+    transition: background 0.1s ease, color 0.1s ease, border-color 0.1s ease;
+    overflow: hidden;
+}
+.path-chip .path-chip-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.path-chip:hover {
+    background: var(--bg-active);
+    border-color: var(--bg-stroke-strong);
+    color: var(--text);
+}
+.path-open-btn {
+    flex-shrink: 0;
+    height: 26px;
+    padding: 0 10px;
+    font-size: 11px;
+    white-space: nowrap;
+}
+.card .preview {
+    color: var(--text-dim);
+    font-size: 11.5px;
+    font-style: italic;
+    margin-top: 2px;
+    line-height: 1.4;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+}
+.card .mono { font-family: var(--mono); font-size: 10.5px; }
+
+/* 卡片右上角图标按钮（Win 图标按钮样式） */
+.card .card-action-icon {
+    position: absolute;
+    top: var(--sp-2);
+    right: var(--sp-2);
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    padding: 5px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.1s ease, color 0.1s ease;
+    line-height: 0;
+}
+.card .card-action-icon:hover {
+    color: var(--accent-hover);
+    background: var(--bg-hover);
+}
+.card .card-action-icon:active { background: var(--bg-active); }
+
+/* 右上角 info 图标按钮（现在卡片只有这一个 card-action-icon） */
+.card .card-action-icon.project-info { right: var(--sp-2); }
+
+/* 标题行：标题 + 右侧 info 按钮同 flex 行。
+   不再用 padding-right 给 info 让位——那会让标题区比下方 meta 区窄、左右不对称。
+   标题 flex:1 自然占满，info 按钮绝对定位浮于右上角，两者互不挤压。
+   标题 nowrap 单行省略，长标题在 info 按钮左侧截断。 */
+.card .title-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-1);
+    margin-bottom: 5px;
+}
+.card .title-row .title {
+    flex: 1;
+    margin-bottom: 0;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-right: 4px; /* 与 info 按钮的视觉间隙 */
+}
+.card.is-expandable { cursor: pointer; }
+
+/* 展开后的项目卡不再变灰（v0.4.22 用户反馈：不需要降亮）。
+   展开态只影响 .card-hover-actions 的显隐和 .expand-body 撑开，
+   项目卡本身的颜色/不透明度保持原样。 */
+
+/* hover 浮出的快捷操作行：默认隐藏，卡片悬停时显现 */
+/* hover 浮出的快捷操作行：默认不占位（height 0），hover 时撑开。
+   撑开瞬间的轻微高度变化是"显式唤出"的有意反馈，可接受。
+   用 opacity 平滑出现，max-height 撑开（不预留固定高度，省垂直空间）。
+   pointer-events 随显隐切换，避免不可见按钮仍可被点击/聚焦。
+   :focus-within 兜底：键盘 Tab 进操作行也能唤出。 */
+.card .card-hover-actions {
+    display: flex;
+    /* 均匀分布：新开会话/继续最近两个按钮等间距铺满 hover 行，
+       不再全挤在左边（与 sub-actions 的 action-chip 统一标尺）。 */
+    justify-content: space-between;
+    gap: 6px;
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+    transition: max-height 0.16s ease, opacity 0.16s ease;
+}
+.card:hover .card-hover-actions,
+.card.is-expanded .card-hover-actions,
+.card:focus-within .card-hover-actions {
+    max-height: 32px;
+    margin-top: var(--sp-2);
+    opacity: 1;
+    pointer-events: auto;
+}
+/* 展开后保留 hover-actions 可见——里面的「展开项目」按钮已切换成「收起」，
+   用户需要它来收起内联会话。不再像旧版那样展开就隐藏整行。 */
+/* card-hover-actions 内的按钮统一用 .action-chip（通用规则在下面定义）。 */
+
+/* 展开体：max-height + opacity 过渡（收起时清空 DOM，过渡只用于展开/收起那一刻） */
+.card .expand-body {
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: max-height 0.18s ease, opacity 0.18s ease;
+}
+.card.is-expanded .expand-body { max-height: 640px; opacity: 1; }
+
+/* 会话行布局（项目内联展开 / 散落对话 / 项目详情会话列表 三处共用）：
+   纵向布局——标题+meta 一行占满宽度，hover 时操作按钮在下方撑开。
+   旧的横向布局（.sub-actions 右侧 opacity 隐藏但占位）会让窄 flyout
+   的标题区永远被挤压，不可取。改为复用项目卡 .card-hover-actions 的范式。 */
+.sub-session {
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+/* sub-main 不加 padding-right：之前为给 info 按钮让位加了 20px 右内边距，
+   导致标题区左右不对称（右边凭空多 20px 空白）。info 按钮现在绝对定位在
+   右上角，标题单行省略时会自动在按钮左侧截断，不需要给 sub-main 让位。 */
+.sub-session .sub-main { flex: 1; min-width: 0; width: 100%; }
+.sub-session .sub-main.is-clickable,
+.sub-session .convo-title,
+.sub-session .loose-title { cursor: pointer; }
+.sub-session .sub-main:hover .sub-title { color: var(--accent-hover); }
+.sub-session .sub-title {
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--text);
+    /* 单行省略：标题超出一行时截断加 …。
+       给右侧 info 按钮留出空间，避免标题文字顶到按钮上——
+       padding-right 与按钮宽度(图标13 + padding5×2=23)对齐，保证视觉留白对称。 */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.3;
+    margin-bottom: 2px;
+    padding-right: 26px;
+    transition: color 0.1s ease;
+}
+.sub-session .sub-title.convo-title:hover,
+.sub-session .sub-title.loose-title:hover { color: var(--accent-hover); }
+/* 会话行右上角 info 按钮——与项目卡 .card-action-icon 完全同一标尺：
+   位置 top/right: sp-2(8px)、padding 5px、radius radius-sm(4px)、
+   显隐时机(行 hover 才出)。三处会话列表 + 项目卡视觉完全一致。 */
+.sub-session .sub-info-btn {
+    position: absolute;
+    top: var(--sp-2);
+    right: var(--sp-2);
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    padding: 5px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 0;
+    opacity: 0;
+    transition: opacity 0.1s ease, background 0.1s ease, color 0.1s ease;
+}
+.sub-session:hover .sub-info-btn,
+.sub-session:focus-within .sub-info-btn { opacity: 1; }
+.sub-session .sub-info-btn:hover {
+    color: var(--accent-hover);
+    background: var(--bg-hover);
+}
+/* 操作图标行：默认不占位（max-height 0），hover 时下方撑开。
+   与项目卡 .card-hover-actions 完全同一范式，保证整 app 交互一致。
+   四个小按钮横排，本身不大，hover 唤出后整体内容自然下移。 */
+.sub-session .sub-actions {
+    display: flex;
+    /* 均匀分布：四个操作 chip 在 hover 撑出的行里等间距铺满，
+       而不是全挤在左边（用户反馈"按钮全部向左靠齐"）。 */
+    justify-content: space-between;
+    gap: 4px;
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+    transition: max-height 0.16s ease, opacity 0.16s ease;
+    margin-top: 0;
+}
+.sub-session:hover .sub-actions,
+.sub-session:focus-within .sub-actions {
+    max-height: 32px;
+    margin-top: var(--sp-2);
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* action-chip：图标 + 文字紧贴成一体的操作小按钮（全 app 统一）。
+   图标和文字 gap 极小（3px），文字与图标等大（同尺寸）、同色（继承 currentColor）。
+   替代旧的纯图标 .card-action-icon 横排和项目卡的 .btn 大按钮——
+   那两个一个无文字、一个风格太重，都与统一标尺不符。
+   通用规则（不带父选择器），项目卡 .card-hover-actions 和会话行 .sub-actions 共用。 */
+.action-chip {
+    flex: 1;
+    padding: 4px 6px;
+    border: none;
+    background: transparent;
+    color: var(--text-dim);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    font-family: var(--font);
+    font-size: 11.5px;
+    line-height: 1;
+    transition: background 0.1s ease, color 0.1s ease;
+    white-space: nowrap;
+}
+.action-chip .action-chip-label {
+    font-size: 11.5px;
+}
+.action-chip:hover {
+    color: var(--text);
+    background: var(--bg-hover);
+}
+.action-chip.is-danger:hover {
+    color: var(--danger);
+}
+/* 旧的纯图标 inline-action 样式作废，但保留 class 以防遗漏引用。 */
+.sub-session .sub-actions .card-action-icon {
+    position: static;
+    padding: 4px;
+}
+
+/* 返回后定位到该会话行时的轻闪高亮：告诉用户"刚才看的就是这条"。
+   沿用 accent-soft（与选中态同色系），淡入淡出 1.2s。 */
+.sub-session.back-highlight {
+    animation: backFlash 1.2s ease-out;
+}
+@keyframes backFlash {
+    0%   { background: var(--accent-soft); }
+    100% { background: transparent; }
+}
+
+/* 展开体内的对话卡片：
+   - 不缩进：与项目卡内容区等宽（v0.4.19 曾加左缩进让卡片靠右，v0.4.24 撤销——
+     用户反馈不需要缩进，会话卡片宽度和项目卡内容区一致即可）。
+   - 灰色底 + 细描边：和项目卡有视觉区分，强化"内联子列表"层级。
+   - 更矮：减小内边距 + meta 字号更小，比散落/归档的会话卡紧凑。
+   - 相邻卡片间留 3px 间距（不用分隔线，间距更干净）。 */
+.expand-body .sub-session {
+    padding: 5px var(--sp-2);
+    margin: 2px 0;
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.035);  /* 灰色底，区别于项目卡 */
+    border: 1px solid transparent;
+}
+.expand-body .sub-session:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: var(--bg-stroke);
+}
+.expand-body .sub-session + .sub-session { margin-top: 3px; }
+.expand-body .sub-main .meta { font-size: 10.5px; }
+.expand-body .sub-session .sub-title { font-size: 12px; margin-bottom: 1px; }
+.sub-empty {
+    color: var(--text-faint);
+    font-size: 11.5px;
+    padding: var(--sp-2);
+}
+/* "查看全部"链接右对齐（在第三个对话卡片底下右对齐显示）。 */
+.expand-body .view-all {
+    color: var(--accent-hover);
+    font-size: 11.5px;
+    cursor: pointer;
+    display: block;
+    text-align: right;
+    padding: var(--sp-2) var(--sp-2) 0;
+}
+.expand-body .view-all:hover { text-decoration: underline; }
+.expand-body .actions { margin-top: 4px; }
+
+/* ============================ 会话历史查看（transcript） ============================ */
+
+/* 会话标题可点（进 transcript 视图）— 用于 conversations 详情页的会话卡片标题 */
+.card .convo-title {
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: color 0.1s ease;
+}
+.card .convo-title:hover { color: var(--accent-hover); }
+
+.transcript-loading {
+    padding: var(--sp-4);
+    color: var(--text-faint);
+    font-size: 12px;
+    text-align: center;
+}
+
+/* 消息流容器 */
+.transcript {
+    padding: 0 var(--sp-2) var(--sp-4);
+}
+
+/* 单条消息回合（user / assistant） */
+/* 单条消息回合：用左侧色条区分角色，不用整框，避免色块过重。
+   user=中性条，assistant=accent 条，更轻盈、扫描更快。 */
+.turn {
+    margin: var(--sp-2) 0;
+    padding: var(--sp-2) 0 var(--sp-2) var(--sp-3);
+    border-left: 2px solid var(--bg-stroke-strong);
+    border-radius: 0;
+}
+.turn-user {
+    border-left-color: rgba(255, 255, 255, 0.18);
+}
+.turn-assistant {
+    border-left-color: var(--accent);
+}
+.turn-role {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-bottom: 2px;
+}
+.turn-assistant .turn-role { color: var(--accent); }
+
+.turn-body { font-size: 12.5px; line-height: 1.55; color: var(--text); }
+.turn-body .block-text { white-space: pre-wrap; word-break: break-word; }
+.turn-body .block-text + .block-text,
+.turn-body .block-text + .collapsible,
+.turn-body .collapsible + .block-text,
+.turn-body .collapsible + .collapsible {
+    margin-top: var(--sp-2);
+}
+
+/* 可折叠区（思考过程 / 工具调用 / 工具结果） */
+.collapsible {
+    border-left: 2px solid var(--bg-stroke-strong);
+    background: rgba(0, 0, 0, 0.14);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    overflow: hidden;
+}
+.collapsible-header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px var(--sp-2);
+    font-size: 11px;
+    color: var(--text-dim);
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.1s ease, background 0.1s ease;
+}
+.collapsible-header:hover { color: var(--text); background: var(--bg-hover); }
+.collapsible-header .icon {
+    transition: transform 0.15s ease;
+    transform: rotate(-90deg); /* 收起时箭头朝右 */
+    flex-shrink: 0;
+}
+.collapsible.is-open .collapsible-header .icon { transform: rotate(0deg); }
+.collapsible-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.18s ease;
+}
+.collapsible.is-open .collapsible-body { max-height: 480px; overflow: auto; }
+.collapsible-body pre {
+    margin: 0;
+    padding: var(--sp-2);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    line-height: 1.5;
+    color: var(--text-dim);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* 工具调用折叠区用强调色边框区分 */
+.block-tool-use { border-left-color: var(--accent); }
+.block-tool-use .collapsible-header { color: var(--accent); }
+.block-tool-result { border-left-color: var(--success); }
+
+/* 项目详情浮层（info 按钮） — 复用 model-switcher 的 flyout 范式 */
+.project-info-flyout {
+    position: fixed;
+    z-index: 999;
+    min-width: 240px;
+    max-width: 320px;
+    background: var(--bg-solid);
+    border: 1px solid var(--bg-stroke-strong);
+    border-radius: var(--radius);
+    padding: var(--sp-3);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    animation: coveOpen 0.14s ease-out;
+    font-family: var(--font);
+}
+.project-info-flyout .pif-name {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: var(--sp-2);
+    word-break: break-word;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 4px;
+    margin: -2px -4px var(--sp-2);
+    border-radius: var(--radius-sm);
+    transition: background 0.1s ease, color 0.1s ease;
+}
+.project-info-flyout .pif-name:hover {
+    background: var(--bg-hover);
+    color: var(--accent-hover);
+}
+.project-info-flyout .pif-name-edit {
+    color: var(--text-faint);
+    display: flex;
+    align-items: center;
+    line-height: 0;
+}
+.project-info-flyout .pif-name:hover .pif-name-edit { color: var(--accent-hover); }
+.project-info-flyout .pif-row {
+    display: flex;
+    gap: var(--sp-2);
+    font-size: 11.5px;
+    margin-bottom: 4px;
+    align-items: baseline;
+}
+.project-info-flyout .pif-label {
+    color: var(--text-faint);
+    min-width: 48px;
+    flex-shrink: 0;
+}
+.project-info-flyout .pif-value {
+    color: var(--text-dim);
+    word-break: break-all;
+}
+.project-info-flyout .pif-value.mono {
+    font-family: var(--mono);
+    font-size: 10.5px;
+}
+
+/* 会话信息浮层：复用 .project-info-flyout 的视觉，但纯只读——
+   标题不可点（无重命名），无底部 remove 按钮。
+   加 .is-convo 修饰覆盖交互态。 */
+.project-info-flyout.is-convo .pif-name {
+    cursor: default;
+}
+.project-info-flyout.is-convo .pif-name:hover {
+    background: transparent;
+    color: var(--text);
+}
+.project-info-flyout.is-convo .pif-name-edit { display: none; }
+
+/* 可复制值：路径/目录/ID 等长文本点击即复制。hover 给可点反馈，加 copy 光标。 */
+.project-info-flyout .pif-value.copyable {
+    cursor: copy;
+    transition: color 0.1s ease;
+}
+.project-info-flyout .pif-value.copyable:hover {
+    color: var(--accent-hover);
+}
+
+/* ============================ 按钮（Win Button / AccentButton） ============================ */
+.btn {
+    background: transparent;
+    border: 1px solid var(--bg-stroke-strong);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 13px;
+    font-weight: 400;
+    cursor: pointer;
+    height: 32px;
+    padding: 0 var(--sp-3);
+    border-radius: var(--radius-sm);
+    transition: background 0.1s ease, border-color 0.1s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+.btn:hover { background: var(--bg-hover); }
+.btn:active { background: var(--bg-active); }
+.btn .icon { color: inherit; }
+
+.btn-accent {
+    background: var(--accent);
+    border-color: transparent;
+    color: #fff;
+}
+.btn-accent:hover { background: var(--accent-hover); }
+.btn-accent:active { background: var(--accent); }
+
+.btn-danger {
+    background: transparent;
+    border-color: rgba(230, 105, 107, 0.5);
+    color: var(--danger);
+}
+.btn-danger:hover { background: var(--danger-soft); border-color: var(--danger); }
+
+.btn-warn {
+    background: transparent;
+    border-color: rgba(229, 163, 59, 0.5);
+    color: var(--warn);
+}
+.btn-warn:hover { background: var(--warn-soft); border-color: var(--warn); }
+
+.btn-ghost {
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+}
+.btn-ghost:hover { background: var(--bg-hover); color: var(--text); }
+.btn-ghost:active { background: var(--bg-active); }
+
+/* ============================ 底栏导航（Win 导航视图风格） ============================ */
+.footer {
+    border-top: 1px solid var(--bg-stroke);
+    padding: var(--sp-1);
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+.footer .btn {
+    flex: 1;
+    height: 32px;
+    border-radius: var(--radius-sm);
+    position: relative;
+    color: var(--text-dim);
+}
+.footer .btn:hover { color: var(--text); }
+.footer .btn.is-active {
+    background: var(--accent-soft);
+    color: var(--accent-hover);
+}
+/* Win 导航的选中指示器：顶部短横条 */
+.footer .btn.is-active::before {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 20px;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--accent);
+}
+
+/* ============================ 导航返回栏 ============================ */
+/* sticky 吸顶：会话详情页滚动时，返回栏+继续按钮始终可见，不需要滚回顶部。
+   复用 section-label 的毛玻璃背景方案（rgba + backdrop-filter），
+   不用实色，避免在 Mica 透出背景上压出灰条。 */
+.nav-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-1);
+    padding: var(--sp-2) var(--sp-2) var(--sp-1);
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: rgba(32, 32, 32, 0.78);
+    backdrop-filter: blur(12px) saturate(140%);
+    -webkit-backdrop-filter: blur(12px) saturate(140%);
+}
+.nav-bar .back-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.1s ease, color 0.1s ease;
+}
+.nav-bar .back-btn:hover { color: var(--text); background: var(--bg-hover); }
+.nav-bar .section-label { padding: 0; }
+
+/* ============================ 空状态 ============================ */
+.empty-state {
+    text-align: center;
+    color: var(--text-dim);
+    padding: var(--sp-5) var(--sp-4);
+    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--sp-3);
+}
+.empty-state .empty-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius);
+    background: var(--bg-elevated);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.empty-state .empty-icon .icon { color: var(--text-faint); }
+.empty-state .empty-title {
+    color: var(--text);
+    font-weight: 600;
+    font-size: 14px;
+}
+.empty-state .hint { font-size: 12px; color: var(--text-faint); }
+
+/* ============================ 动作行 ============================ */
+.actions {
+    margin-top: var(--sp-3);
+    display: flex;
+    gap: var(--sp-2);
+}
+.actions .btn { flex: 1; }
+
+/* ============================ 摘要栏 ============================ */
+.summary-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--sp-2);
+    /* v0.4.25：padding 12→8、margin-bottom 8→6，压缩清理页顶部高度，
+       让摘要条更紧凑、与下方卡片间距（6px）节奏统一。 */
+    padding: var(--sp-2);
+    margin: 0 var(--sp-2) 6px;
+    background: var(--warn-soft);
+    border: 1px solid rgba(229, 163, 59, 0.25);
+    border-radius: var(--radius-md);
+}
+.summary-bar .summary-title { font-weight: 600; font-size: 13px; }
+.summary-bar .summary-title .num { color: var(--warn); }
+.summary-bar .summary-sub { color: var(--text-faint); font-size: 11px; margin-top: 2px; }
+
+.loading { color: var(--text-faint); font-size: 13px; padding: var(--sp-3); text-align: center; }
+.card-hint {
+    text-align: center;
+    color: var(--text-faint);
+    font-size: 11px;
+    padding: var(--sp-2) var(--sp-2) var(--sp-3);
+}
+
+/* ============================ 孤儿数据卡片（清理视图） ============================ */
+/* v0.4.25：清理卡片信息密度低（tag+desc+path+按钮），通用 .card 的 10px/sp-4
+   内边距偏空。覆盖成更紧凑的 7px/sp-3，列表更密，一屏多看几条。 */
+.orphan-card { cursor: default; padding: 7px var(--sp-3); }
+.orphan-card:hover { background: var(--bg-elevated); }
+.orphan-card .orphan-head {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    margin-bottom: 4px;
+}
+.orphan-card .orphan-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+.orphan-card .orphan-tag.is-safe {
+    color: var(--success);
+    background: rgba(108, 208, 165, 0.14);
+}
+.orphan-card .orphan-tag.is-risky {
+    color: var(--warn);
+    background: var(--warn-soft);
+}
+.orphan-card .orphan-size {
+    color: var(--text-dim);
+    font-size: 11px;
+    font-family: var(--mono);
+}
+.orphan-card .orphan-desc {
+    color: var(--text-dim);
+    font-size: 11.5px;
+    line-height: 1.45;
+    margin-bottom: 3px;
+}
+
+/* ============================ Modal ============================ */
+/* Win flyout 内部弹窗用 ContentDialog 风格：实色 + 轻阴影 */
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: var(--sp-4);
+    animation: fadeIn 0.12s ease-out;
+}
+.modal {
+    /* Mica 透明背景下，modal 需要不透明实色保证可读性 */
+    background: var(--bg-solid);
+    border: 1px solid var(--bg-stroke-strong);
+    border-radius: var(--radius);
+    padding: var(--sp-4);
+    width: 100%;
+    max-width: 300px;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+    animation: modalIn 0.16s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+.modal .modal-title {
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: var(--sp-2);
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+}
+.modal .modal-title .icon { color: var(--warn); }
+.modal .modal-title.is-danger .icon { color: var(--danger); }
+.modal .modal-body {
+    color: var(--text-dim);
+    font-size: 12.5px;
+    line-height: 1.5;
+    margin-bottom: var(--sp-3);
+    word-break: break-word;
+}
+.modal .modal-body .mono { font-family: var(--mono); color: var(--text); font-size: 11px; }
+.modal .modal-input {
+    width: 100%;
+    /* 输入框在 modal 内，modal 已是不透明实色，这里用更深的实色区分 */
+    background: #1f1f1f;
+    border: 1px solid var(--bg-stroke-strong);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12.5px;
+    padding: var(--sp-2) var(--sp-3);
+    margin-bottom: var(--sp-3);
+    outline: none;
+    transition: border-color 0.12s ease;
+}
+.modal .modal-input:focus { border-color: var(--accent-border); }
+.modal .modal-input::placeholder { color: var(--text-faint); }
+.modal .modal-actions {
+    display: flex;
+    gap: var(--sp-2);
+    justify-content: flex-end;
+}
+.modal .modal-actions .btn { flex: 0 0 auto; min-width: 80px; }
+
+/* ============================ Select list (delete selector) ============================ */
+.select-modal { max-width: 340px; }
+.select-list {
+    max-height: 260px;
+    overflow-y: auto;
+    margin-bottom: var(--sp-3);
+    border: 1px solid var(--bg-stroke);
+    border-radius: var(--radius-sm);
+    padding: var(--sp-1);
+}
+.select-item {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: 7px var(--sp-2);
+    border-radius: var(--radius-xs);
+    cursor: pointer;
+    font-size: 12.5px;
+    transition: background 0.1s ease;
+}
+.select-item:hover { background: var(--bg-hover); }
+.select-item input[type=checkbox] {
+    accent-color: var(--accent);
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+.select-item input[type=checkbox]:disabled { cursor: not-allowed; opacity: 0.5; }
+.select-item-label {
+    flex: 1;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.select-item-size {
+    color: var(--text-faint);
+    font-family: var(--mono);
+    font-size: 11px;
+    flex-shrink: 0;
+}
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modalIn {
+    from { opacity: 0; transform: scale(0.97) translateY(4px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* ============================ Toast ============================ */
+/* ============================ Model switcher menu ============================ */
+/* Flyout-style menu anchored under the model label in the titlebar. */
+.titlebar-model.clickable {
+    cursor: pointer;
+    transition: background 0.1s ease;
+}
+.titlebar-model.clickable:hover { background: var(--bg-hover); }
+
+.model-switcher {
+    position: fixed;
+    z-index: 999;
+    min-width: 180px;
+    background: var(--bg-solid);
+    border: 1px solid var(--bg-stroke-strong);
+    border-radius: var(--radius);
+    box-shadow: 0 14px 32px rgba(0, 0, 0, 0.5);
+    padding: var(--sp-1);
+    animation: coveOpen 0.14s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+.model-switcher-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-3);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 12.5px;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.1s ease;
+}
+.model-switcher-item:hover { background: var(--bg-hover); }
+.model-switcher-item.is-current { color: var(--accent-hover); }
+.model-switcher-item .ms-tier {
+    font-weight: 600;
+    min-width: 56px;
+}
+.model-switcher-item .ms-name {
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 11px;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.model-switcher-item .ms-check {
+    color: var(--accent-hover);
+    flex-shrink: 0;
+}
+
+/* ============================ 「新对话▾」复合按钮 ============================ */
+/* 散落对话页 section-label 右侧的「新对话」按钮带小箭头：
+   主体（点=静默开新会话）+ 箭头（点=弹目录菜单）视觉上合成一个按钮，
+   中间用细分隔线分区（借鉴下拉按钮的 split-button 范式）。
+   两个子按钮都复用 .section-action 的 ghost 标尺，但去 margin-left（由
+   外层 .new-chat-wrap 统一占位），并紧贴无 gap 让它们看起来是一体。 */
+.new-chat-wrap {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: stretch;
+    /* 锁死高度 = 单按钮 .section-action 的 24px，确保 split-button 和其他页
+       的单个操作按钮等高（section-label 视觉四页统一的前提）。 */
+    height: 24px;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+.new-chat-wrap .section-action {
+    margin-left: 0;
+    border-radius: 0;
+}
+.new-chat-main {
+    border-right: 1px solid var(--bg-stroke);
+}
+/* 箭头按钮更窄（只放一个 ▾），和主体等高。 */
+.new-chat-caret {
+    min-width: 22px;
+    padding: 0 6px;
+    font-size: 11px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* 「更改默认目录」菜单：复用 .model-switcher flyout 容器，加一个只读
+   "当前目录"信息行。ws-current 不响应点击，纯展示。 */
+.workspace-menu .ws-current {
+    padding: var(--sp-2) var(--sp-3);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    border-bottom: 1px solid var(--bg-stroke);
+    margin-bottom: var(--sp-1);
+}
+.workspace-menu .ws-current-label {
+    font-size: 10.5px;
+    color: var(--text-faint);
+    font-weight: 600;
+}
+.workspace-menu .ws-current-path {
+    font-size: 11px;
+    color: var(--text-dim);
+    word-break: break-all;
+    line-height: 1.35;
+}
+/* 菜单里的「更改默认目录…」项用 ms-tier 当图标+文字容器，去掉 min-width。 */
+.workspace-menu .ws-change .ms-tier {
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.toast {
+    position: fixed;
+    bottom: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    /* Mica 透明背景下 toast 需要不透明实色保证可读 */
+    background: var(--bg-solid);
+    border: 1px solid var(--bg-stroke-strong);
+    color: var(--text);
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--radius-sm);
+    font-size: 12.5px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+    z-index: 1001;
+    animation: toastIn 0.16s ease-out;
+    white-space: nowrap;
+}
+@keyframes toastIn {
+    from { opacity: 0; transform: translateX(-50%) translateY(6px); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+/* toast 退出：淡出+下移，与入场对称 */
+.toast.leaving {
+    animation: toastOut 0.15s ease-in forwards;
+    pointer-events: none;
+}
+@keyframes toastOut {
+    from { opacity: 1; transform: translateX(-50%) translateY(0); }
+    to { opacity: 0; transform: translateX(-50%) translateY(6px); }
+}
+
+/* modal 退出：背景淡出 + 内容轻微缩小，与 modalIn 对称 */
+.modal-backdrop.leaving {
+    animation: fadeOut 0.14s ease-in forwards;
+}
+.modal-backdrop.leaving .modal {
+    animation: modalOut 0.14s ease-in forwards;
+}
+@keyframes fadeOut {
+    from { opacity: 1; } to { opacity: 0; }
+}
+@keyframes modalOut {
+    from { opacity: 1; transform: scale(1) translateY(0); }
+    to { opacity: 0; transform: scale(0.97) translateY(4px); }
+}

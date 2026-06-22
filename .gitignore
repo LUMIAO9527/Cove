@@ -1,0 +1,58 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+/build*.log
+
+# Release artifacts — kept on disk for distribution, not tracked in git.
+# Only the current version should live in dist-release/; old ones get cleaned.
+/dist-release/Cove*.exe
+/dist-release/Cove*.msi
+
+# Cove runtime markers written next to the exe (not source)
+/.cove-welcome-seen
+# cove-debug.log 运行时跟随 exe 生成（根目录或 dist-release/），
+# 已被上面 *.log 覆盖，这里显式标注以防误删规则。
+/cove-debug.log
+/dist-release/cove-debug.log
+
+# One-off debug / test scripts (underscore-prefixed) — never commit
+/_*.ps1
+/_*.bat
+/_*.sh
+/src-tauri/_*.bat
+
+# Windows reserved-name junk from errant "cmd > nul" redirects
+/nul
+
+# 评审临时产物：三轮挑刺式评审的 prompt + 三模型原始输出。
+# 评审报告的精华已在 HANDOFF.md 第八节版本历史里，原始输出留在本地备查。
+/_review_tmp/
+
+# 开发私档（含本机路径、调试过程、环境清单、设计讨论）——不公开，仅本地保留。
+/HANDOFF.md
+/ENVIRONMENT.md
+/docs/
+
+# 本地 GitHub 凭证（token 等），永不提交。
+/.github-credentials.local
