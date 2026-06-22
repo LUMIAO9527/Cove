@@ -16,7 +16,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?logo=opensourceinitiative&logoColor=white)](./LICENSE)
 [![No Telemetry](https://img.shields.io/badge/遥测-无-success)](#运行时数据)
 
-**其他语言:** &nbsp;[English](./README.md)
+**其他语言:** &nbsp;[English](./README.md) · [日本語](./README.ja.md) · [Español](./README.es.md) · [Français](./README.fr.md) · [Deutsch](./README.de.md) · [Português (BR)](./README.pt-BR.md) · [Русский](./README.ru.md) · [한국어](./README.ko.md)
 
 </div>
 

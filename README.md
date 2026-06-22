@@ -16,7 +16,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?logo=opensourceinitiative&logoColor=white)](./LICENSE)
 [![No Telemetry](https://img.shields.io/badge/telemetry-none-success)](#runtime-data)
 
-**Read this in another language:** &nbsp;[简体中文](./README.zh-CN.md)
+**Read this in another language:** &nbsp;[简体中文](./README.zh-CN.md) · [日本語](./README.ja.md) · [Español](./README.es.md) · [Français](./README.fr.md) · [Deutsch](./README.de.md) · [Português (BR)](./README.pt-BR.md) · [Русский](./README.ru.md) · [한국어](./README.ko.md)
 
 </div>
 
