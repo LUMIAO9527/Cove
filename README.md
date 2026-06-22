@@ -1,126 +1,161 @@
+<div align="center">
+
+<img src="https://github.com/LUMIAO9527/Cove/releases/download/v0.4.28/cove-banner.png" alt="Cove" width="640">
+
 # Cove
 
-> 一个 Windows 系统托盘工具，用来管理 [Claude Code](https://claude.com/claude-code) 的项目与对话。
+**A Windows system-tray tool to manage [Claude Code](https://claude.com/claude-code) projects & conversations.**
 
-Cove 常驻系统托盘，点击图标弹出 380×580 的 Win11 风格 flyout 面板，失焦自动隐藏。
+[![Windows](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-0078D4?logo=windows11&logoColor=white)](#install)
+[![Tauri](https://img.shields.io/badge/Tauri-2.11-FFC131?logo=tauri&logoColor=black)](#architecture)
+[![Rust](https://img.shields.io/badge/Rust-1.96+-CE422B?logo=rust&logoColor=white)](#build-from-source)
+[![TypeScript](https://img.shields.io/badge/TypeScript-native-3178C6?logo=typescript&logoColor=white)](#architecture)
+[![Release](https://img.shields.io/badge/release-v0.4.28-blue?logo=github&logoColor=white)](https://github.com/LUMIAO9527/Cove/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green?logo=opensourceinitiative&logoColor=white)](./LICENSE)
+[![No Telemetry](https://img.shields.io/badge/telemetry-none-success)](#runtime-data)
 
-它解决一个真实痛点：**删除一条 Claude Code 对话时，除了 `.jsonl` 正文，还有 7 处关联数据会残留成"孤儿"**——tasks、file-history、session-env、telemetry 等。Cove 把这 8 处一并处理，并提供软归档（移走 + 可恢复）和全局孤儿扫描。
+**Read this in another language:** &nbsp;[简体中文](./README.zh-CN.md)
 
----
-
-## ✨ 功能
-
-- **项目 & 对话管理** — 扫描 `~/.claude/projects/`，按项目分组列出所有对话，展示每条对话的模型、消息数、大小、首问摘要
-- **智能标题** — `custom-title` → `ai-title` → `summary` → 首条用户消息，绝不会出现"无标题"
-- **软归档** — 把对话及其全部关联数据移到归档区，随时可恢复到原位
-- **真删除** — 永久删除对话 + 8 处关联数据
-- **全局孤儿扫描** — 扫描所有"正文已删但附属残留"的孤儿，单项或批量清理
-- **模型展示** — 顶栏全局默认模型 + 每条对话实际跑过的模型
-- **新对话启动器** — 在指定工作目录一键启动 `claude`，支持默认目录记忆
-- **会话历史查看** — 只读浏览完整对话记录（user/assistant 消息流，思考过程/工具调用可折叠）
-- **Win11 风格** — Mica 半透明、托盘 flyout、卡片入场/滑出动画、深色主题
+</div>
 
 ---
 
-## 📥 安装
+> Cove lives in the system tray. Click the icon and a 380×580 Win11-style flyout pops out; it hides the moment you click away.
+>
+> It solves a real pain point: **when you delete a Claude Code conversation, deleting the `.jsonl` transcript alone leaves 7 related artifacts behind as "orphans"** — tasks, file-history, session-env, telemetry, and more. Cove cleans all **8 locations together**, and adds soft-archive (move + restore) plus a global orphan scan.
 
-### 方式一：下载（推荐）
+---
 
-从 [Releases](../../releases) 下载任一：
+## 📑 Table of Contents
 
-| 文件 | 说明 | 大小 |
-|---|---|---|
-| `Cove.exe` | 免安装单文件，双击即用 | ~10 MB |
-| `Cove_0.4.28_x64-setup.exe` | NSIS 安装包 | ~2.2 MB |
-| `Cove_0.4.28_x64_en-US.msi` | MSI 安装包 | ~3.5 MB |
+- [✨ Features](#-features)
+- [📥 Install](#-install)
+- [🏗️ Architecture](#-architecture)
+- [⚙️ Runtime Data](#-runtime-data)
+- [🛠️ Development](#-development)
+- [📄 License](#-license)
 
-仅支持 Windows 10/11 x64。安装/运行后托盘出现图标，点击即弹出面板。
+---
 
-### 方式二：从源码构建
+## ✨ Features
 
-需要 Windows 10/11 + Rust 1.96+ + Node.js 24+ + VS 2022 Build Tools（C++ 工作负载）。
+- **Projects & conversations** — Scans `~/.claude/projects/`, lists every conversation grouped by project, and shows each one's model, message count, size, and first-question summary.
+- **Smart titles** — `custom-title` → `ai-title` → `summary` → first user message. Never shows "Untitled".
+- **Soft archive** — Moves a conversation and all its related data to an archive area; fully restorable to the original spot.
+- **True delete** — Permanently removes a conversation plus all 8 related data locations.
+- **Global orphan scan** — Finds every "transcript gone but leftovers remain" orphan across all projects; clean one or many at once.
+- **Model display** — Global default model in the top bar, plus the actual model each conversation ran on.
+- **New-conversation launcher** — Launch `claude` in a chosen working directory in one click, with a remembered default directory.
+- **Session history viewer** — Read-only browsing of the full transcript (user/assistant message stream; thinking/tool calls collapsible).
+- **Win11 style** — Mica translucency, tray flyout, card enter/slide-out animations, dark theme.
+
+---
+
+## 📥 Install
+
+### Option 1: Download (recommended)
+
+Grab any of these from [Releases](../../releases):
+
+| File | Description | Size |
+|------|-------------|------|
+| `Cove.exe` | Portable single file — double-click to run | ~10 MB |
+| `Cove_0.4.28_x64-setup.exe` | NSIS installer | ~2.2 MB |
+| `Cove_0.4.28_x64_en-US.msi` | MSI installer | ~3.5 MB |
+
+**Windows 10/11 x64 only.** After install/run, a tray icon appears; click it to pop out the panel.
+
+### Build from source
+
+Requires Windows 10/11 + Rust 1.96+ + Node.js 24+ + VS 2022 Build Tools (C++ workload).
 
 ```bash
-git clone <this-repo>
+git clone https://github.com/LUMIAO9527/Cove.git
 cd Cove
 npm install --include=dev
-npm run tauri dev          # 开发模式（热重载）
-npm run tauri build        # 打包 release 产物
+npm run tauri dev          # dev mode (hot reload)
+npm run tauri build        # build release artifacts
 ```
 
 ---
 
-## 🏗️ 架构
+## 🏗️ Architecture
 
-**Tauri 2.11 + Rust + 原生 TypeScript（无 React/Vue）+ Vite**。产物 < 11 MB，运行时内存 ~34 MB。
+**Tauri 2.11 + Rust + native TypeScript (no React/Vue) + Vite.** Artifact < 11 MB, runtime memory ~34 MB.
 
-### 核心：8 处关联数据
+### The core: 8 related data locations
 
-删除一条对话时，如果只删 `.jsonl` 正文，其余 7 处会残留成孤儿。Cove 把它们一并处理：
+When deleting a conversation, removing only the `.jsonl` transcript leaves the other 7 as orphans. Cove handles all of them:
 
-| # | 数据 | 路径 | 关联键 |
-|---|---|---|---|
-| ① | 对话正文 | `projects\<编码>\<SID>.jsonl` | 文件名 |
-| ② | 同名子目录 | `projects\<编码>\<SID>\` (subagents/results) | 目录名 |
-| ③ | Todo 任务 | `tasks\<SID>\` | 目录名 |
-| ④ | 编辑快照 | `file-history\<SID>\` | 目录名 |
-| ⑤ | 遥测事件 | `telemetry\1p_failed_events.<SID>.<X>.json` | 文件名前缀 |
-| ⑥ | 会话环境 | `session-env\<SID>\` | 目录名 |
-| ⑦ | 命令历史 | `history.jsonl` | 行内 `sessionId` 字段 |
-| ⑧ | 进程元数据 | `sessions\<PID>.json` | 文件内 `sessionId` |
+| # | Data | Path | Join key |
+|---|------|------|----------|
+| ① | Transcript | `projects\<encoded>\<SID>.jsonl` | filename |
+| ② | Same-name subdir | `projects\<encoded>\<SID>\` (subagents/results) | dir name |
+| ③ | Todo tasks | `tasks\<SID>\` | dir name |
+| ④ | Edit snapshots | `file-history\<SID>\` | dir name |
+| ⑤ | Telemetry events | `telemetry\1p_failed_events.<SID>.<X>.json` | filename prefix |
+| ⑥ | Session env | `session-env\<SID>\` | dir name |
+| ⑦ | Command history | `history.jsonl` | inline `sessionId` field |
+| ⑧ | Process metadata | `sessions\<PID>.json` | in-file `sessionId` |
 
-### 代码结构
+### Code structure
 
-```
+```text
 Cove/
-├── src-tauri/src/          # Rust 后端
-│   ├── lib.rs              # 托盘/窗口/状态机/单实例/Mica
-│   ├── commands.rs         # Tauri command 桥接层
-│   ├── scan.rs             # jsonl 解析、标题回退
-│   ├── transcript.rs       # 会话全文解析（只读查看）
-│   ├── related.rs          # 8 处关联数据定位
-│   ├── cleanup.rs          # 关联删除、孤儿扫描
-│   ├── archive.rs          # 归档/恢复/索引
-│   ├── paths.rs            # 路径编码/解码
-│   ├── settings.rs         # settings.json 读写
-│   ├── projects_config.rs  # 项目列表读写
-│   └── models.rs           # 数据结构
-├── src-tauri/tests/        # 集成测试
-├── src/                    # 前端（原生 TS）
-│   ├── main.ts             # 入口/路由/动画
-│   ├── api.ts              # invoke 封装
-│   └── views/              # 项目/对话/归档/清理/会话详情等视图
-└── src/styles/             # 主题 + 动画 + 图标
+├── src-tauri/src/          # Rust backend
+│   ├── lib.rs              # tray / window / state machine / single-instance / Mica
+│   ├── commands.rs         # Tauri command bridge
+│   ├── scan.rs             # jsonl parsing, title fallback
+│   ├── transcript.rs       # full session parsing (read-only viewer)
+│   ├── related.rs          # locate the 8 related data locations
+│   ├── cleanup.rs          # related delete, orphan scan
+│   ├── archive.rs          # archive / restore / index
+│   ├── paths.rs            # path encoding / decoding
+│   ├── settings.rs         # settings.json read/write
+│   ├── projects_config.rs  # project list read/write
+│   └── models.rs           # data structures
+├── src-tauri/tests/        # integration tests
+├── src/                    # frontend (native TS)
+│   ├── main.ts             # entry / routing / animation
+│   ├── api.ts              # invoke wrappers
+│   └── views/              # project / conversation / archive / cleanup / detail views
+└── src/styles/             # theme + animations + icons
 ```
 
 ---
 
-## ⚙️ 运行时数据
+## ⚙️ Runtime Data
 
-| 用途 | 路径 |
-|---|---|
-| Claude Code 数据（Cove 读写） | `~/.claude/` |
-| Cove 归档区 | `~/.claude-managed/archive/` |
+| Purpose | Path |
+|---------|------|
+| Claude Code data (Cove reads & writes) | `~/.claude/` |
+| Cove archive area | `~/.claude-managed/archive/` |
 
-Cove 不收集任何遥测，所有数据都在本地。
+Cove collects **no telemetry**. All data stays local.
 
 ---
 
-## 🛠️ 开发
+## 🛠️ Development
 
 ```bash
 cd src-tauri
-cargo test                # 跑集成测试
+cargo test                # run integration tests
 ```
 
-**常见问题**
+**Common issues**
 
-- `cargo build` 报 `link.exe not found` → 安装 VS 2022 Build Tools（含 C++ 工作负载）
-- `npm install` 只装了几个包 → 用 `npm install --include=dev`
-- Rust 命令找不到 → Rust 默认装在 `~/.cargo/bin`，可能不在系统 PATH
+- `cargo build` reports `link.exe not found` → install VS 2022 Build Tools (with the C++ workload).
+- `npm install` only installed a few packages → use `npm install --include=dev`.
+- Rust commands not found → Rust installs to `~/.cargo/bin` by default and may not be on PATH.
 
 ---
 
 ## 📄 License
 
-[MIT](LICENSE)
+[MIT](./LICENSE)
+
+<div align="center">
+
+<sub>Manage your Claude Code conversations like email — clean, archived, never orphaned.</sub>
+
+</div>
