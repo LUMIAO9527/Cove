@@ -34,11 +34,23 @@ pub struct Project {
 }
 
 /// Global model configuration.
+///
+/// Each tier has two names:
+///   - `*_model`:      the raw id (may carry technical suffixes like `[1M]`).
+///   - `*_model_name`: the clean display label (cc-switch's `_MODEL_NAME`), or
+///                     the raw id when no clean label is configured.
+/// The frontend prefers `*_model_name` for the tray label.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelInfo {
     pub opus_model: String,
     pub sonnet_model: String,
     pub haiku_model: String,
+    #[serde(default)]
+    pub opus_model_name: String,
+    #[serde(default)]
+    pub sonnet_model_name: String,
+    #[serde(default)]
+    pub haiku_model_name: String,
 }
 
 /// The 8 related-data locations for a single SID.

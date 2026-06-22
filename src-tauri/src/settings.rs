@@ -16,6 +16,16 @@ struct SettingsEnv {
     sonnet_model: Option<String>,
     #[serde(rename = "ANTHROPIC_DEFAULT_HAIKU_MODEL")]
     haiku_model: Option<String>,
+    /// Display-name variants written by cc-switch (e.g. OPUS_MODEL=GLM-5.2[1M],
+    /// OPUS_MODEL_NAME=GLM-5.2). The plain _MODEL keeps technical suffixes like
+    /// [1M] (context window) that look ugly in the UI; _NAME is the clean label.
+    /// Absent on stock Claude Code installs — falls back to _MODEL.
+    #[serde(rename = "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME", default)]
+    opus_model_name: Option<String>,
+    #[serde(rename = "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME", default)]
+    sonnet_model_name: Option<String>,
+    #[serde(rename = "ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME", default)]
+    haiku_model_name: Option<String>,
 }
 
 pub fn read_model_info() -> ModelInfo {
@@ -29,18 +39,52 @@ pub fn read_model_info() -> ModelInfo {
         opus_model: None,
         sonnet_model: None,
         haiku_model: None,
+        opus_model_name: None,
+        sonnet_model_name: None,
+        haiku_model_name: None,
     });
 
+    // For each tier, produce (raw_id, clean_name) reading each env field once.
+    // The clean name prefers the _NAME label (cc-switch writes it without the
+    // technical [1M] suffix); falls back to the raw _MODEL id; finally to "未配置".
+    // Done per-field instead of via a closure to avoid moving env fields twice.
+    let resolve = |model: Option<String>, name: Option<String>| -> (String, String) {
+        let raw = model.unwrap_or_else(|| "未配置".to_string());
+        let clean = match name {
+            Some(n) if !n.trim().is_empty() => n,
+            _ => raw.clone(),
+        };
+        (raw, clean)
+    };
+
+    let (opus_model, opus_model_name) = resolve(env.opus_model, env.opus_model_name);
+    let (sonnet_model, sonnet_model_name) = resolve(env.sonnet_model, env.sonnet_model_name);
+    let (haiku_model, haiku_model_name) = resolve(env.haiku_model, env.haiku_model_name);
+
     ModelInfo {
-        opus_model: env.opus_model.unwrap_or_else(|| "未配置".to_string()),
-        sonnet_model: env.sonnet_model.unwrap_or_else(|| "未配置".to_string()),
-        haiku_model: env.haiku_model.unwrap_or_else(|| "未配置".to_string()),
+        opus_model,
+        sonnet_model,
+        haiku_model,
+        opus_model_name,
+        sonnet_model_name,
+        haiku_model_name,
     }
 }
 
-/// Read the top-level "model" field (the active default tier: opus/sonnet/haiku).
-/// Returns "sonnet" when unset (Claude Code's own default).
-pub fn read_default_tier() -> String {
+/// Read the RAW top-level "model" field exactly as written in settings.json.
+///
+/// Two shapes occur in the wild:
+///   1. A tier alias: "opus" | "sonnet" | "haiku" (stock Claude Code). The active
+///      model is then the one mapped by the matching ANTHROPIC_DEFAULT_*_MODEL.
+///   2. A direct model id: e.g. "DeepSeek-V4-Pro", "gpt-5.5" — written by cc-switch
+///      when a provider sets an explicit model. In this case there is NO tier
+///      alias; the three tier slots don't apply and the UI must show this id as
+///      the single active default rather than forcing it into a tier.
+///
+/// Returns "" when the field is absent (treated as the Claude Code default sonnet
+/// by the caller). We deliberately do NOT collapse case (2) to "sonnet" here —
+/// that would mislabel the active model. The frontend decides how to render.
+pub fn read_raw_model() -> String {
     let path = claude_dir().join("settings.json");
     let v: serde_json::Value = fs::read_to_string(&path)
         .ok()
@@ -48,8 +92,43 @@ pub fn read_default_tier() -> String {
         .unwrap_or(serde_json::Value::Null);
     v.get("model")
         .and_then(|m| m.as_str())
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| "sonnet".to_string())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_default()
+}
+
+/// Whether `tier` is one of the three standard aliases. Used by the frontend to
+/// distinguish "tier alias" (case 1) from "direct model id" (case 2).
+pub fn is_tier_alias(tier: &str) -> bool {
+    matches!(tier, "opus" | "sonnet" | "haiku")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_tier_alias;
+
+    #[test]
+    fn test_tier_aliases_recognized() {
+        // The three standard Claude Code tier aliases must be detected so the
+        // switcher can highlight the matching row.
+        assert!(is_tier_alias("opus"));
+        assert!(is_tier_alias("sonnet"));
+        assert!(is_tier_alias("haiku"));
+    }
+
+    #[test]
+    fn test_direct_model_id_not_treated_as_tier() {
+        // cc-switch writes the real model id into the top-level "model" field
+        // (e.g. "DeepSeek-V4-Pro", "gpt-5.5", "gemini-3.5-flash"). These must
+        // NOT be misclassified as a tier alias — otherwise the switcher would
+        // wrongly highlight a row and the tray would show the wrong slot.
+        // Values sampled from the user's real ~/.cc-switch/cc-switch.db.
+        assert!(!is_tier_alias("DeepSeek-V4-Pro"));
+        assert!(!is_tier_alias("gpt-5.5"));
+        assert!(!is_tier_alias("gemini-3.5-flash"));
+        assert!(!is_tier_alias("GLM-5.2"));
+        assert!(!is_tier_alias(""));
+    }
 }
 
 /// Write the top-level "model" field (active default tier) to settings.json,

@@ -1250,10 +1250,22 @@ button:focus-visible { outline-offset: 1px; }
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.model-switcher-item .ms-check {
+/* 右槽固定宽度：选中行放 ✓，未选中 / Default 行放空。固定宽度保证四行
+   模型名（ms-name）的对齐位置一致——不会因有无 ✓ 而错位。 */
+.model-switcher-item .ms-slot {
     color: var(--accent-hover);
     flex-shrink: 0;
+    width: 16px;
+    display: inline-flex;
+    justify-content: center;
 }
+/* Default 行：不可点击、不高亮，融入列表但不暗示可点。 */
+.model-switcher-item.is-static {
+    cursor: default;
+    color: var(--text-dim);
+}
+.model-switcher-item.is-static:hover { background: transparent; }
+.model-switcher-item.is-static .ms-tier { font-weight: 500; }
 
 /* ============================ 「新对话▾」复合按钮 ============================ */
 /* 散落对话页 section-label 右侧的「新对话」按钮带小箭头：

@@ -554,19 +554,21 @@ const TIER_LABEL: Record<string, string> = {
     haiku: "Haiku",
 };
 
-/** Map a tier key to its configured model name from ModelInfo. */
+/** Map a tier key to its clean display name (prefers _name, falls back to _model). */
 function tierModel(info: ModelState["info"], tier: string): string {
-    if (tier === "opus") return info.opus_model;
-    if (tier === "haiku") return info.haiku_model;
-    return info.sonnet_model;
+    if (tier === "opus") return info.opus_model_name || info.opus_model;
+    if (tier === "haiku") return info.haiku_model_name || info.haiku_model;
+    return info.sonnet_model_name || info.sonnet_model;
 }
 
 let modelStateCache: ModelState | null = null;
 
 export async function renderHeader(modelEl: HTMLElement): Promise<void> {
     modelEl.classList.add("clickable");
-    modelEl.title = "点击切换默认模型";
-    modelEl.onclick = () => showModelSwitcher(modelEl);
+    modelEl.title = "默认模型（悬停切换）";
+    // hover 触发模型菜单（复用通用 hover-flyout 机制：mouseenter 打开、
+    // 离开带 60ms 容差关闭，避免鼠标穿越 anchor↔菜单间隙时误关）。
+    attachHoverFlyout(modelEl, () => buildModelSwitcher(modelEl));
     await refreshModelLabel(modelEl);
 }
 
@@ -575,23 +577,53 @@ async function refreshModelLabel(modelEl: HTMLElement): Promise<void> {
     try {
         const state = await api.getModelState();
         modelStateCache = state;
-        label = tierModel(state.info, state.tier) || "未配置";
+        // When `model` is a direct id (cc-switch sets e.g. "DeepSeek-V4-Pro"),
+        // `tier` is empty — show that raw id directly. Otherwise resolve the
+        // tier slot's clean name.
+        label = state.tier
+            ? (tierModel(state.info, state.tier) || "未配置")
+            : (state.model || "未配置");
     } catch {
         /* keep default */
     }
     modelEl.innerHTML = `<span class="model-dot-inner"></span>${escapeHtml(label)}`;
 }
 
-/** Pop up a model-tier switcher anchored under the model label. */
-async function showModelSwitcher(modelEl: HTMLElement): Promise<void> {
-    // Remove any existing menu.
+/**
+ * 构建模型切换菜单（hover 浮层）。返回菜单元素，由 attachHoverFlyout 负责
+ * append / 定位 / 关闭。
+ *
+ * 四行排版完全同构：每行都是 [ms-tier 标签 | ms-name 模型名 | ms-slot 右槽]。
+ * 右槽固定宽度（ms-slot），选中档位放 ✓，未选中的放空槽——这样有无 ✓ 的行
+ * 模型名对齐位置一致，不会因为 ✓ 撑位导致 Default 行错位（用户反馈的根因）。
+ */
+function buildModelSwitcher(modelEl: HTMLElement): HTMLElement {
+    // 清掉可能残留的旧菜单（attachHoverFlyout 只清 .project-info-flyout）。
     document.querySelectorAll(".model-switcher").forEach((e) => e.remove());
-    if (!modelStateCache) return;
-    const state = modelStateCache;
 
-    const current = state.tier;
     const menu = document.createElement("div");
     menu.className = "model-switcher";
+    if (!modelStateCache) return menu;
+    const state = modelStateCache;
+    const current = state.tier;
+
+    // 第一行：Default 行——只在 ccswitch 直连模型时显示。
+    //   - 档位模式（model 是 opus/sonnet/haiku）：Default = 选中档位，是同一
+    //     件事，显示会重复，故不显示 Default 行。
+    //   - 直连模式（ccswitch 把顶层 model 写成具体模型名如 "DeepSeek-V4-Pro"）：
+    //     三档都不命中，Default 行单独显示这个直连模型，告诉用户当前实际生效的
+    //     是它（而非某个档位）。这才是 Default 真正有价值的场景。
+    if (!current && state.model) {
+        const info = document.createElement("div");
+        info.className = "model-switcher-item is-static";
+        info.innerHTML =
+            `<span class="ms-tier">Default</span>` +
+            `<span class="ms-name">${escapeHtml(state.model)}</span>` +
+            `<span class="ms-slot"></span>`;
+        menu.appendChild(info);
+    }
+
+    // 三档：Opus / Sonnet / Haiku。选中的右槽放 ✓，其余放空槽。
     for (const tier of ["opus", "sonnet", "haiku"]) {
         const name = tierModel(state.info, tier);
         const isCur = tier === current;
@@ -600,13 +632,15 @@ async function showModelSwitcher(modelEl: HTMLElement): Promise<void> {
         item.innerHTML =
             `<span class="ms-tier">${TIER_LABEL[tier] || tier}</span>` +
             `<span class="ms-name">${escapeHtml(name || "未配置")}</span>` +
-            (isCur ? `<span class="ms-check">${icon("check")}</span>` : "");
+            `<span class="ms-slot">${isCur ? icon("check") : ""}</span>`;
         item.onclick = async (ev) => {
             ev.stopPropagation();
             if (isCur) { menu.remove(); return; }
             try {
                 await api.setDefaultTier(tier);
-                modelStateCache = { tier, info: state.info };
+                // 选档位会把顶层 "model" 改写成该别名，故新激活模型就是这档；
+                // 同步更新 model + tier 让缓存反映真实状态。
+                modelStateCache = { model: tier, tier, info: state.info };
                 await refreshModelLabel(modelEl);
                 toast(`默认模型已切换为 ${TIER_LABEL[tier]}`);
             } catch (e) {
@@ -616,19 +650,5 @@ async function showModelSwitcher(modelEl: HTMLElement): Promise<void> {
         };
         menu.appendChild(item);
     }
-    // Anchor: below the label, right-aligned to its right edge.
-    document.body.appendChild(menu);
-    const r = modelEl.getBoundingClientRect();
-    menu.style.right = (window.innerWidth - r.right) + "px";
-    menu.style.top = (r.bottom + 4) + "px";
-    // Click outside closes.
-    setTimeout(() => {
-        const closer = (ev: MouseEvent) => {
-            if (!menu.contains(ev.target as Node)) {
-                menu.remove();
-                document.removeEventListener("mousedown", closer);
-            }
-        };
-        document.addEventListener("mousedown", closer);
-    }, 0);
+    return menu;
 }

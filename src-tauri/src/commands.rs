@@ -7,7 +7,7 @@ use crate::models::{Conversation, ModelInfo, OrphanEntry, Project, RelatedItem, 
 use crate::paths::{archive_dir, claude_dir, encode_project_path};
 use crate::projects_config::{self, ProjectEntry};
 use crate::scan::conversations_for_path;
-use crate::settings::{read_default_tier, read_model_info, set_default_tier, default_workspace, set_default_workspace};
+use crate::settings::{read_model_info, read_raw_model, is_tier_alias, set_default_tier, default_workspace, set_default_workspace};
 use crate::transcript;
 use tauri::Manager;
 
@@ -363,12 +363,26 @@ pub fn set_dialog_open(open: bool) {
     crate::set_dialog_open_internal(open);
 }
 
-/// Active default model tier ("opus" | "sonnet" | "haiku") + the three tiers'
-/// configured model names, for the model-switcher UI.
+/// Active default model state for the model-switcher UI.
+///
+/// Returns three fields so the frontend can handle both shapes of the top-level
+/// `"model"` field in settings.json:
+///   - `model`: the raw value exactly as written ("sonnet", "opus", OR a direct
+///     model id like "DeepSeek-V4-Pro" set by cc-switch).
+///   - `tier`: "opus"/"sonnet"/"haiku" when `model` is a tier alias; "" when it's
+///     a direct model id (no tier applies). This is what the switcher highlights.
+///   - `info`: the three tier slots (each with raw id + clean display name).
+///
+/// The empty-`tier` case is the cc-switch "direct model" path: the tray label
+/// shows the raw model and the switcher shows no tier highlighted (with a note
+/// that the active model is set directly, not via a tier alias).
 #[tauri::command]
 pub fn get_model_state() -> serde_json::Value {
+    let raw = read_raw_model();
+    let tier = if is_tier_alias(&raw) { raw.clone() } else { String::new() };
     serde_json::json!({
-        "tier": read_default_tier(),
+        "model": raw,
+        "tier": tier,
         "info": read_model_info(),
     })
 }

@@ -32,9 +32,16 @@ export interface ModelInfo {
     opus_model: string;
     sonnet_model: string;
     haiku_model: string;
+    /** Clean display label (cc-switch _MODEL_NAME), falls back to *_model. */
+    opus_model_name: string;
+    sonnet_model_name: string;
+    haiku_model_name: string;
 }
 
 export interface ModelState {
+    /** Raw top-level "model" value: a tier alias OR a direct model id (cc-switch). */
+    model: string;
+    /** "opus"/"sonnet"/"haiku" when model is a tier alias; "" when it's a direct id. */
     tier: string;
     info: ModelInfo;
 }
