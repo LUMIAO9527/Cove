@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🪟 Cove
+# 🐬 Cove
 
 ### 一个 Windows 系统托盘工具,用来管理 Claude Code 的项目与对话。
 

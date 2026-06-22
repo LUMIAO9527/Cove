@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🪟 Cove
+# 🐬 Cove
 
 ### A Windows system-tray tool to manage Claude Code projects & conversations.
 
