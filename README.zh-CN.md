@@ -1,10 +1,12 @@
 <div align="center">
 
-<img src="https://github.com/LUMIAO9527/Cove/releases/download/v0.4.28/cove-banner.png" alt="Cove" width="640">
+# 🪟 Cove
 
-# Cove
+### 一个 Windows 系统托盘工具,用来管理 Claude Code 的项目与对话。
 
-**一个 Windows 系统托盘工具,用来管理 [Claude Code](https://claude.com/claude-code) 的项目与对话。**
+`系统托盘` · `flyout 面板` · `无遥测` · `纯本地`
+
+<sub>像管理邮件一样管理你的 Claude Code 对话 —— 干净、可归档、不留孤儿。</sub>
 
 [![Windows](https://img.shields.io/badge/平台-Windows%2010%2F11%20x64-0078D4?logo=windows11&logoColor=white)](#安装)
 [![Tauri](https://img.shields.io/badge/Tauri-2.11-FFC131?logo=tauri&logoColor=black)](#架构)
@@ -152,10 +154,4 @@ cargo test                # 跑集成测试
 
 ## 📄 License
 
-[MIT](./LICENSE)
-
-<div align="center">
-
-<sub>像管理邮件一样管理你的 Claude Code 对话 —— 干净、可归档、不留孤儿。</sub>
-
-</div>
+[MIT](./LICENSE) · ⭐ 如果 Cove 对你有帮助,欢迎 Star。

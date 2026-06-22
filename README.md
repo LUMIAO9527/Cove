@@ -1,10 +1,12 @@
 <div align="center">
 
-<img src="https://github.com/LUMIAO9527/Cove/releases/download/v0.4.28/cove-banner.png" alt="Cove" width="640">
+# 🪟 Cove
 
-# Cove
+### A Windows system-tray tool to manage Claude Code projects & conversations.
 
-**A Windows system-tray tool to manage [Claude Code](https://claude.com/claude-code) projects & conversations.**
+`system tray` · `flyout panel` · `no telemetry` · `local only`
+
+<sub>Treat your Claude Code conversations like email — clean, archived, never orphaned.</sub>
 
 [![Windows](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-0078D4?logo=windows11&logoColor=white)](#install)
 [![Tauri](https://img.shields.io/badge/Tauri-2.11-FFC131?logo=tauri&logoColor=black)](#architecture)
@@ -152,10 +154,4 @@ cargo test                # run integration tests
 
 ## 📄 License
 
-[MIT](./LICENSE)
-
-<div align="center">
-
-<sub>Manage your Claude Code conversations like email — clean, archived, never orphaned.</sub>
-
-</div>
+[MIT](./LICENSE) · ⭐ Star this repo if Cove helps you.
