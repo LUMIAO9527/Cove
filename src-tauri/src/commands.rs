@@ -369,36 +369,44 @@ pub fn set_dialog_open(open: bool) {
 /// `"model"` field in settings.json:
 ///   - `model`: the raw value exactly as written ("sonnet", "opus", OR a direct
 ///     model id like "DeepSeek-V4-Pro" set by cc-switch).
-///   - `tier`: "opus"/"sonnet"/"haiku" when `model` is a tier alias; "" when it's
-///     a direct model id (no tier applies). This is what the switcher highlights.
-///   - `info`: the three tier slots (each with raw id + clean display name).
+///   - `tier`: a tier alias ("opus"/"sonnet"/"fable"/"haiku"/...) when `model`
+///     matches a discovered tier slot; "" when it's a direct model id (no tier
+///     applies). This is what the switcher highlights.
+///   - `info`: all discovered tier slots (each with raw id + clean display name).
 ///
 /// The empty-`tier` case is the cc-switch "direct model" path: the tray label
 /// shows the raw model and the switcher shows no tier highlighted (with a note
 /// that the active model is set directly, not via a tier alias).
 #[tauri::command]
 pub fn get_model_state() -> serde_json::Value {
+    let info = read_model_info();
     let raw = read_raw_model();
-    let tier = if is_tier_alias(&raw) { raw.clone() } else { String::new() };
+    let tier = if is_tier_alias(&info, &raw) {
+        raw.clone()
+    } else {
+        String::new()
+    };
     serde_json::json!({
         "model": raw,
         "tier": tier,
-        "info": read_model_info(),
+        "info": info,
     })
 }
 
 /// Set the active default tier (writes top-level "model" in settings.json,
-/// preserving everything else).
+/// preserving everything else). `tier` must be one of the slots currently
+/// discovered in settings.json — dynamic, so newly configured tiers (e.g.
+/// fable) are accepted without a code change, while arbitrary strings (and
+/// shell-injection attempts via IPC) are rejected.
 #[tauri::command]
 pub fn set_default_tier_cmd(tier: String) -> Result<String, String> {
     let t = tier.trim();
-    match t {
-        "opus" | "sonnet" | "haiku" => {
-            set_default_tier(t)?;
-            Ok(format!("已切换默认模型为 {}", t))
-        }
-        _ => Err(format!("未知档位: {tier}")),
+    let info = read_model_info();
+    if t.is_empty() || !is_tier_alias(&info, t) {
+        return Err(format!("未知档位: {tier}"));
     }
+    set_default_tier(t)?;
+    Ok(format!("已切换默认模型为 {}", t))
 }
 
 /// The configured default workspace for new chats (the "新对话" button on the

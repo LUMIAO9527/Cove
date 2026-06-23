@@ -28,14 +28,18 @@ export interface Project {
     added_at: number;    // unix millis when added
 }
 
+export interface TierSlot {
+    /** Tier alias key, lowercased as in the env var name (opus/sonnet/fable/haiku). */
+    tier: string;
+    /** Raw model id (may carry technical suffixes like `[1M]`). */
+    model: string;
+    /** Clean display label (cc-switch _MODEL_NAME), falls back to `model`. */
+    model_name: string;
+}
+
 export interface ModelInfo {
-    opus_model: string;
-    sonnet_model: string;
-    haiku_model: string;
-    /** Clean display label (cc-switch _MODEL_NAME), falls back to *_model. */
-    opus_model_name: string;
-    sonnet_model_name: string;
-    haiku_model_name: string;
+    /** Discovered tier slots (sonnet→opus→fable→haiku, then alpha). */
+    tiers: TierSlot[];
 }
 
 export interface ModelState {

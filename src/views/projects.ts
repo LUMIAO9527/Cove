@@ -1,4 +1,4 @@
-import { api, Project, Conversation, ModelState } from "../api";
+import { api, Project, Conversation, ModelState, ModelInfo } from "../api";
 import { icon } from "../styles/icons";
 import { toast, promptDialog, confirmDialog } from "./confirm";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -548,17 +548,20 @@ export function showConvoInfo(anchor: HTMLElement, convo: Conversation): void {
     });
 }
 
-const TIER_LABEL: Record<string, string> = {
-    opus: "Opus",
-    sonnet: "Sonnet",
-    haiku: "Haiku",
-};
+/** Tier label for the switcher row: capitalized tier alias ("opus"→"Opus").
+ *  No hardcoded table — works for any discovered tier (fable→Fable, etc.). */
+function tierLabel(tier: string): string {
+    const t = tier.trim();
+    if (!t) return "";
+    return t.charAt(0).toUpperCase() + t.slice(1);
+}
 
-/** Map a tier key to its clean display name (prefers _name, falls back to _model). */
-function tierModel(info: ModelState["info"], tier: string): string {
-    if (tier === "opus") return info.opus_model_name || info.opus_model;
-    if (tier === "haiku") return info.haiku_model_name || info.haiku_model;
-    return info.sonnet_model_name || info.sonnet_model;
+/** Find a slot by tier key; return its clean display name (prefers
+ *  model_name, falls back to model). "" when the tier isn't configured. */
+function tierModel(info: ModelInfo, tier: string): string {
+    const slot = info.tiers.find((s) => s.tier === tier);
+    if (!slot) return "";
+    return slot.model_name || slot.model;
 }
 
 let modelStateCache: ModelState | null = null;
@@ -593,9 +596,12 @@ async function refreshModelLabel(modelEl: HTMLElement): Promise<void> {
  * 构建模型切换菜单（hover 浮层）。返回菜单元素，由 attachHoverFlyout 负责
  * append / 定位 / 关闭。
  *
- * 四行排版完全同构：每行都是 [ms-tier 标签 | ms-name 模型名 | ms-slot 右槽]。
+ * 行排版完全同构：每行都是 [ms-tier 标签 | ms-name 模型名 | ms-slot 右槽]。
  * 右槽固定宽度（ms-slot），选中档位放 ✓，未选中的放空槽——这样有无 ✓ 的行
  * 模型名对齐位置一致，不会因为 ✓ 撑位导致 Default 行错位（用户反馈的根因）。
+ *
+ * 档位数量动态：遍历后端发现的 tiers（opus/sonnet/fable/haiku/...），来几个
+ * 显示几个，不再硬编码三档。
  */
 function buildModelSwitcher(modelEl: HTMLElement): HTMLElement {
     // 清掉可能残留的旧菜单（attachHoverFlyout 只清 .project-info-flyout）。
@@ -608,11 +614,11 @@ function buildModelSwitcher(modelEl: HTMLElement): HTMLElement {
     const current = state.tier;
 
     // 第一行：Default 行——只在 ccswitch 直连模型时显示。
-    //   - 档位模式（model 是 opus/sonnet/haiku）：Default = 选中档位，是同一
-    //     件事，显示会重复，故不显示 Default 行。
+    //   - 档位模式（model 是 opus/sonnet/fable/haiku）：Default = 选中档位，是
+    //     同一件事，显示会重复，故不显示 Default 行。
     //   - 直连模式（ccswitch 把顶层 model 写成具体模型名如 "DeepSeek-V4-Pro"）：
-    //     三档都不命中，Default 行单独显示这个直连模型，告诉用户当前实际生效的
-    //     是它（而非某个档位）。这才是 Default 真正有价值的场景。
+    //     所有档位都不命中，Default 行单独显示这个直连模型，告诉用户当前实际
+    //     生效的是它（而非某个档位）。这才是 Default 真正有价值的场景。
     if (!current && state.model) {
         const info = document.createElement("div");
         info.className = "model-switcher-item is-static";
@@ -623,15 +629,17 @@ function buildModelSwitcher(modelEl: HTMLElement): HTMLElement {
         menu.appendChild(info);
     }
 
-    // 三档：Opus / Sonnet / Haiku。选中的右槽放 ✓，其余放空槽。
-    for (const tier of ["opus", "sonnet", "haiku"]) {
-        const name = tierModel(state.info, tier);
+    // 所有已发现档位（由后端按 sonnet→opus→fable→haiku→alpha 排序给出）。
+    // 选中的右槽放 ✓，其余放空槽。
+    for (const slot of state.info.tiers) {
+        const tier = slot.tier;
+        const name = slot.model_name || slot.model || "未配置";
         const isCur = tier === current;
         const item = document.createElement("button");
         item.className = "model-switcher-item" + (isCur ? " is-current" : "");
         item.innerHTML =
-            `<span class="ms-tier">${TIER_LABEL[tier] || tier}</span>` +
-            `<span class="ms-name">${escapeHtml(name || "未配置")}</span>` +
+            `<span class="ms-tier">${escapeHtml(tierLabel(tier))}</span>` +
+            `<span class="ms-name">${escapeHtml(name)}</span>` +
             `<span class="ms-slot">${isCur ? icon("check") : ""}</span>`;
         item.onclick = async (ev) => {
             ev.stopPropagation();
@@ -642,7 +650,7 @@ function buildModelSwitcher(modelEl: HTMLElement): HTMLElement {
                 // 同步更新 model + tier 让缓存反映真实状态。
                 modelStateCache = { model: tier, tier, info: state.info };
                 await refreshModelLabel(modelEl);
-                toast(`默认模型已切换为 ${TIER_LABEL[tier]}`);
+                toast(`默认模型已切换为 ${tierLabel(tier)}`);
             } catch (e) {
                 toast("切换失败: " + (e as Error).message);
             }

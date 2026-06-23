@@ -35,22 +35,30 @@ pub struct Project {
 
 /// Global model configuration.
 ///
-/// Each tier has two names:
-///   - `*_model`:      the raw id (may carry technical suffixes like `[1M]`).
-///   - `*_model_name`: the clean display label (cc-switch's `_MODEL_NAME`), or
-///                     the raw id when no clean label is configured.
-/// The frontend prefers `*_model_name` for the tray label.
+/// Dynamically discovered from `settings.json`: every `ANTHROPIC_DEFAULT_<X>_MODEL`
+/// env var becomes one tier slot. New Claude Code tiers (fable, and anything
+/// future) are picked up with zero code changes — no more hardcoded
+/// opus/sonnet/haiku.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelInfo {
-    pub opus_model: String,
-    pub sonnet_model: String,
-    pub haiku_model: String,
-    #[serde(default)]
-    pub opus_model_name: String,
-    #[serde(default)]
-    pub sonnet_model_name: String,
-    #[serde(default)]
-    pub haiku_model_name: String,
+    /// Discovered tier slots, ordered sonnet → opus → fable → haiku, then
+    /// unknown tiers alphabetically. Empty when settings.json has no
+    /// ANTHROPIC_DEFAULT_*_MODEL at all (stock Claude Code / fresh install).
+    pub tiers: Vec<TierSlot>,
+}
+
+/// One model tier slot discovered from settings.json.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TierSlot {
+    /// Tier alias key, lowercased as written in the env var name (e.g.
+    /// "opus", "sonnet", "fable", "haiku"). The frontend matches this against
+    /// the top-level "model" value to decide which row is active.
+    pub tier: String,
+    /// Raw model id (may carry technical suffixes like `[1M]`).
+    pub model: String,
+    /// Clean display label (cc-switch's `_MODEL_NAME`), or the raw id when no
+    /// clean label is configured. The frontend prefers this for the tray label.
+    pub model_name: String,
 }
 
 /// The 8 related-data locations for a single SID.
