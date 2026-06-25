@@ -2,7 +2,7 @@
 
 # 🐬 Cove
 
-### Ein Tool für den Windows-Infobereich zur Verwaltung von Claude-Code-Projekten und -Konversationen.
+### Ein Tool für den Windows-Infobereich zur Verwaltung von Claude-Code- und Reasonix-Projekten und -Konversationen.
 
 `Infobereich` · `Flyout-Panel` · `keine Telemetrie` · `ausschließlich lokal`
 
@@ -12,7 +12,7 @@
 [![Tauri](https://img.shields.io/badge/Tauri-2.11-FFC131?logo=tauri&logoColor=black)](#architecture)
 [![Rust](https://img.shields.io/badge/Rust-1.96+-CE422B?logo=rust&logoColor=white)](#build-from-source)
 [![TypeScript](https://img.shields.io/badge/TypeScript-native-3178C6?logo=typescript&logoColor=white)](#architecture)
-[![Release](https://img.shields.io/badge/release-v0.4.28-blue?logo=github&logoColor=white)](https://github.com/LUMIAO9527/Cove/releases/latest)
+[![Release](https://img.shields.io/badge/release-v0.5.0-blue?logo=github&logoColor=white)](https://github.com/LUMIAO9527/Cove/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?logo=opensourceinitiative&logoColor=white)](./LICENSE)
 [![No Telemetry](https://img.shields.io/badge/telemetry-none-success)](#runtime-data)
 
@@ -41,6 +41,7 @@
 
 ## ✨ Funktionen
 
+- **Multi-Tool-Unterstützung** — Verwalten Sie **Claude Code** und **Reasonix** nebeneinander. Ein Kapsel-Umschalter in der oberen Leiste wählt das pro Seite angezeigte Tool; der Installationsstatus wird automatisch erkannt.
 - **Projekte & Konversationen** — Durchsucht `~/.claude/projects/`, listet jede Konversation nach Projekt gruppiert auf und zeigt für jede das Modell, die Nachrichtenanzahl, die Größe und die Zusammenfassung der ersten Frage an.
 - **Intelligente Titel** — `custom-title` → `ai-title` → `summary` → erste Benutzernachricht. Zeigt niemals „Untitled".
 - **Weiche Archivierung** — Verschiebt eine Konversation samt allen zugehörigen Daten in einen Archivbereich; vollständig am ursprünglichen Ort wiederherstellbar.
@@ -62,8 +63,8 @@ Laden Sie eine beliebige Datei aus den [Releases](../../releases) herunter:
 | Datei | Beschreibung | Größe |
 |------|-------------|------|
 | `Cove.exe` | Portable Einzeldatei — Doppelklick zum Ausführen | ~10 MB |
-| `Cove_0.4.28_x64-setup.exe` | NSIS-Installer | ~2.2 MB |
-| `Cove_0.4.28_x64_en-US.msi` | MSI-Installer | ~3.5 MB |
+| `Cove_0.5.0_x64-setup.exe` | NSIS-Installer | ~2.2 MB |
+| `Cove_0.5.0_x64_en-US.msi` | MSI-Installer | ~3.5 MB |
 
 **Nur Windows 10/11 x64.** Nach der Installation/Ausführung erscheint ein Tray-Symbol; klicken Sie darauf, um das Panel aufklappen zu lassen.
 
@@ -84,6 +85,19 @@ npm run tauri build        # Release-Artefakte bauen
 ## 🏗️ Architektur
 
 **Tauri 2.11 + Rust + natives TypeScript (ohne React/Vue) + Vite.** Artefakt < 11 MB, Speicherverbrauch zur Laufzeit ~34 MB.
+
+### Multi-Tool-Architektur
+
+Jedes Tool hat ein völlig anderes Datenlayout und Session-Schema, daher erfolgen Scan / Transkript / Start pro Tool:
+
+| | Claude Code | Reasonix |
+|---|---|---|
+| Sessions | `~/.claude/projects/<encoded>/<SID>.jsonl` | `~/.reasonix/sessions/<name>.jsonl` + `.meta.json` |
+| ID | UUID | Dateiname (ohne UUID) |
+| Fortsetzen | `claude --resume <SID>` | `reasonix code -r` (neueste Session des Workspace) |
+| Bereinigung | vollständiger 8-Speicherort-Orphan-Scan | nicht zutreffend (Sidecars werden mit der Session gelöscht) |
+
+Eine `ToolKind`-Enumeration (`src-tauri/src/tools/`) leitet jede Operation an den richtigen Adapter weiter.
 
 ### Der Kern: 8 zugehörige Datenorte
 
@@ -107,6 +121,10 @@ Cove/
 ├── src-tauri/src/          # Rust-Backend
 │   ├── lib.rs              # Tray / Fenster / Zustandsmaschine / Single-Instance / Mica
 │   ├── commands.rs         # Tauri-Command-Bridge
+│   ├── tools/              # Multi-Tool-Verteilung (ToolKind + Adapter pro Tool)
+│   │   ├── mod.rs          #   ToolKind-Enum + Installationsprüfung + Start
+│   │   ├── claude.rs       #   Claude-Code-Adapter
+│   │   └── reasonix.rs     #   Reasonix-Adapter
 │   ├── scan.rs             # jsonl-Parsing, Titel-Fallback
 │   ├── transcript.rs       # vollständiges Session-Parsing (schreibgeschützter Viewer)
 │   ├── related.rs          # die 8 zugehörigen Datenorte lokalisieren
@@ -114,7 +132,7 @@ Cove/
 │   ├── archive.rs          # archivieren / wiederherstellen / Index
 │   ├── paths.rs            # Pfad-Codierung / -Decodierung
 │   ├── settings.rs         # settings.json lesen/schreiben
-│   ├── projects_config.rs  # Projektliste lesen/schreiben
+│   ├── projects_config.rs  # Projektliste lesen/schreiben (pro Tool)
 │   └── models.rs           # Datenstrukturen
 ├── src-tauri/tests/        # Integrationstests
 ├── src/                    # Frontend (natives TS)

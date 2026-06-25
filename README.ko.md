@@ -2,7 +2,7 @@
 
 # 🐬 Cove
 
-### Windows 시스템 트레이 도구로 Claude Code 프로젝트와 대화를 관리합니다.
+### Windows 시스템 트레이 도구로 Claude Code와 Reasonix 프로젝트 및 대화를 관리합니다.
 
 `system tray` · `flyout panel` · `no telemetry` · `local only`
 
@@ -12,7 +12,7 @@
 [![Tauri](https://img.shields.io/badge/Tauri-2.11-FFC131?logo=tauri&logoColor=black)](#architecture)
 [![Rust](https://img.shields.io/badge/Rust-1.96+-CE422B?logo=rust&logoColor=white)](#build-from-source)
 [![TypeScript](https://img.shields.io/badge/TypeScript-native-3178C6?logo=typescript&logoColor=white)](#architecture)
-[![Release](https://img.shields.io/badge/release-v0.4.28-blue?logo=github&logoColor=white)](https://github.com/LUMIAO9527/Cove/releases/latest)
+[![Release](https://img.shields.io/badge/release-v0.5.0-blue?logo=github&logoColor=white)](https://github.com/LUMIAO9527/Cove/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?logo=opensourceinitiative&logoColor=white)](./LICENSE)
 [![No Telemetry](https://img.shields.io/badge/telemetry-none-success)](#runtime-data)
 
@@ -41,6 +41,7 @@
 
 ## ✨ 기능
 
+- **멀티 도구 지원** — **Claude Code**와 **Reasonix**를 나란히 관리합니다. 상단 바의 캡슐 스위처로 각 페이지가 표시할 도구를 선택하며, 설치 여부는 자동으로 탐지합니다.
 - **프로젝트 및 대화** — `~/.claude/projects/`를 스캔하여 모든 대화를 프로젝트별로 그룹화해 표시하며, 각각의 모델, 메시지 수, 크기, 첫 질문 요약을 보여줍니다.
 - **스마트 제목** — `custom-title` → `ai-title` → `summary` → 첫 번째 사용자 메시지 순으로 적용됩니다. "Untitled"가 표시되지 않습니다.
 - **소프트 아카이브** — 대화와 관련된 모든 데이터를 아카이브 영역으로 이동시키며, 원래 위치로 완전히 복원할 수 있습니다.
@@ -62,8 +63,8 @@
 | 파일 | 설명 | 크기 |
 |------|-------------|------|
 | `Cove.exe` | 단일 실행 파일 — 더블클릭으로 실행 | ~10 MB |
-| `Cove_0.4.28_x64-setup.exe` | NSIS 설치 프로그램 | ~2.2 MB |
-| `Cove_0.4.28_x64_en-US.msi` | MSI 설치 프로그램 | ~3.5 MB |
+| `Cove_0.5.0_x64-setup.exe` | NSIS 설치 프로그램 | ~2.2 MB |
+| `Cove_0.5.0_x64_en-US.msi` | MSI 설치 프로그램 | ~3.5 MB |
 
 **Windows 10/11 x64 전용입니다.** 설치/실행 후 트레이 아이콘이 나타나며, 클릭하면 패널이 나타납니다.
 
@@ -84,6 +85,19 @@ npm run tauri build        # build release artifacts
 ## 🏗️ 아키텍처
 
 **Tauri 2.11 + Rust + 네이티브 TypeScript(React/Vue 없음) + Vite.** 빌드 결과물 크기 < 11 MB, 런타임 메모리 ~34 MB.
+
+### 멀티 도구 아키텍처
+
+각 도구는 데이터 레이아웃과 세션 스키마가 완전히 다르므로, 스캔/트랜스크립트/실행을 도구별로 분기합니다:
+
+| | Claude Code | Reasonix |
+|---|---|---|
+| 세션 | `~/.claude/projects/<encoded>/<SID>.jsonl` | `~/.reasonix/sessions/<name>.jsonl` + `.meta.json` |
+| ID | UUID | 파일명(UUID 없음) |
+| 재개 | `claude --resume <SID>` | `reasonix code -r`(워크스페이스의 최근 세션) |
+| 정리 | 8개 위치 전체 고아 데이터 스캔 | 해당 없음(사이드카는 세션과 함께 삭제됨) |
+
+`ToolKind` 열거자(`src-tauri/src/tools/`)가 각 작업을 알맞은 어댑터로 라우팅합니다.
 
 ### 핵심: 8개의 관련 데이터 위치
 
@@ -107,6 +121,10 @@ Cove/
 ├── src-tauri/src/          # Rust backend
 │   ├── lib.rs              # tray / window / state machine / single-instance / Mica
 │   ├── commands.rs         # Tauri command bridge
+│   ├── tools/              # 멀티 도구 분기(ToolKind + 각 도구 어댑터)
+│   │   ├── mod.rs          #   ToolKind 열거자 + 설치 탐지 + 실행
+│   │   ├── claude.rs       #   Claude Code 어댑터
+│   │   └── reasonix.rs     #   Reasonix 어댑터
 │   ├── scan.rs             # jsonl parsing, title fallback
 │   ├── transcript.rs       # full session parsing (read-only viewer)
 │   ├── related.rs          # locate the 8 related data locations
@@ -114,7 +132,7 @@ Cove/
 │   ├── archive.rs          # archive / restore / index
 │   ├── paths.rs            # path encoding / decoding
 │   ├── settings.rs         # settings.json read/write
-│   ├── projects_config.rs  # project list read/write
+│   ├── projects_config.rs  # project list read/write (도구별)
 │   └── models.rs           # data structures
 ├── src-tauri/tests/        # integration tests
 ├── src/                    # frontend (native TS)

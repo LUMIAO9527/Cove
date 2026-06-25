@@ -2,7 +2,7 @@
 
 # 🐬 Cove
 
-### Claude Code のプロジェクトと会話を管理する Windows システムトレイツール。
+### Claude Code と Reasonix のプロジェクトと会話を管理する Windows システムトレイツール。
 
 `system tray` · `flyout panel` · `no telemetry` · `local only`
 
@@ -12,7 +12,7 @@
 [![Tauri](https://img.shields.io/badge/Tauri-2.11-FFC131?logo=tauri&logoColor=black)](#architecture)
 [![Rust](https://img.shields.io/badge/Rust-1.96+-CE422B?logo=rust&logoColor=white)](#build-from-source)
 [![TypeScript](https://img.shields.io/badge/TypeScript-native-3178C6?logo=typescript&logoColor=white)](#architecture)
-[![Release](https://img.shields.io/badge/release-v0.4.28-blue?logo=github&logoColor=white)](https://github.com/LUMIAO9527/Cove/releases/latest)
+[![Release](https://img.shields.io/badge/release-v0.5.0-blue?logo=github&logoColor=white)](https://github.com/LUMIAO9527/Cove/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?logo=opensourceinitiative&logoColor=white)](./LICENSE)
 [![No Telemetry](https://img.shields.io/badge/telemetry-none-success)](#runtime-data)
 
@@ -41,6 +41,7 @@
 
 ## ✨ 機能
 
+- **マルチツール対応** — **Claude Code** と **Reasonix** を並べて管理できます。タイトルバーのカプセルスイッチャーで各ページに表示するツールを選択し、インストール状態は自動で検出します。
 - **プロジェクトと会話** — `~/.claude/projects/` をスキャンし、プロジェクトごとにグループ化されたすべての会話を一覧表示し、それぞれのモデル、メッセージ数、サイズ、最初の質問のサマリーを表示します。
 - **スマートタイトル** — `custom-title` → `ai-title` → `summary` → 最初のユーザーメッセージ。「Untitled」は表示しません。
 - **ソフトアーカイブ** — 会話とその関連データをすべてアーカイブ領域に移動します。元の場所に完全に復元できます。
@@ -62,8 +63,8 @@
 | File | Description | Size |
 |------|-------------|------|
 | `Cove.exe` | ポータブル単体ファイル — ダブルクリックで実行 | ~10 MB |
-| `Cove_0.4.28_x64-setup.exe` | NSIS インストーラー | ~2.2 MB |
-| `Cove_0.4.28_x64_en-US.msi` | MSI インストーラー | ~3.5 MB |
+| `Cove_0.5.0_x64-setup.exe` | NSIS インストーラー | ~2.2 MB |
+| `Cove_0.5.0_x64_en-US.msi` | MSI インストーラー | ~3.5 MB |
 
 **Windows 10/11 x64 専用です。** インストール/実行後、トレイアイコンが表示されます。クリックするとパネルがポップアップします。
 
@@ -84,6 +85,19 @@ npm run tauri build        # build release artifacts
 ## 🏗️ アーキテクチャ
 
 **Tauri 2.11 + Rust + ネイティブ TypeScript（React/Vue なし）+ Vite。** 成果物は 11 MB 未満、実行時メモリは約 34 MB です。
+
+### マルチツールアーキテクチャ
+
+ツールごとにデータレイアウトとセッションスキーマが完全に異なるため、スキャン/トランスクリプト/起動はツール別にディスパッチされます:
+
+| | Claude Code | Reasonix |
+|---|---|---|
+| セッション | `~/.claude/projects/<encoded>/<SID>.jsonl` | `~/.reasonix/sessions/<name>.jsonl` + `.meta.json` |
+| ID | UUID | ファイル名ステム(UUID なし) |
+| 再開 | `claude --resume <SID>` | `reasonix code -r`(ワークスペースの最新) |
+| クリーンアップ | 完全な 8 箇所の孤児データスキャン | 該当なし(sidecar はセッションと共に削除) |
+
+`ToolKind` 列挙型(`src-tauri/src/tools/`)が各操作を適切なアダプタにルーティングします。
 
 ### コア: 8 つの関連データ箇所
 
@@ -107,6 +121,10 @@ Cove/
 ├── src-tauri/src/          # Rust backend
 │   ├── lib.rs              # tray / window / state machine / single-instance / Mica
 │   ├── commands.rs         # Tauri command bridge
+│   ├── tools/              # multi-tool dispatch (ToolKind + per-tool adapters)
+│   │   ├── mod.rs          #   ToolKind enum + install probe + launch
+│   │   ├── claude.rs       #   Claude Code adapter
+│   │   └── reasonix.rs     #   Reasonix adapter
 │   ├── scan.rs             # jsonl parsing, title fallback
 │   ├── transcript.rs       # full session parsing (read-only viewer)
 │   ├── related.rs          # locate the 8 related data locations
@@ -114,7 +132,7 @@ Cove/
 │   ├── archive.rs          # archive / restore / index
 │   ├── paths.rs            # path encoding / decoding
 │   ├── settings.rs         # settings.json read/write
-│   ├── projects_config.rs  # project list read/write
+│   ├── projects_config.rs  # project list read/write (per-tool)
 │   └── models.rs           # data structures
 ├── src-tauri/tests/        # integration tests
 ├── src/                    # frontend (native TS)

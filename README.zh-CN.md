@@ -2,7 +2,7 @@
 
 # 🐬 Cove
 
-### 一个 Windows 系统托盘工具,用来管理 Claude Code 的项目与对话。
+### 一个 Windows 系统托盘工具,用来管理 Claude Code 与 Reasonix 的项目和对话。
 
 `系统托盘` · `flyout 面板` · `无遥测` · `纯本地`
 
@@ -12,7 +12,7 @@
 [![Tauri](https://img.shields.io/badge/Tauri-2.11-FFC131?logo=tauri&logoColor=black)](#架构)
 [![Rust](https://img.shields.io/badge/Rust-1.96+-CE422B?logo=rust&logoColor=white)](#从源码构建)
 [![TypeScript](https://img.shields.io/badge/TypeScript-原生-3178C6?logo=typescript&logoColor=white)](#架构)
-[![Release](https://img.shields.io/badge/发布-v0.4.28-blue?logo=github&logoColor=white)](https://github.com/LUMIAO9527/Cove/releases/latest)
+[![Release](https://img.shields.io/badge/发布-v0.5.0-blue?logo=github&logoColor=white)](https://github.com/LUMIAO9527/Cove/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?logo=opensourceinitiative&logoColor=white)](./LICENSE)
 [![No Telemetry](https://img.shields.io/badge/遥测-无-success)](#运行时数据)
 
@@ -41,7 +41,8 @@
 
 ## ✨ 功能
 
-- **项目 & 对话管理** — 扫描 `~/.claude/projects/`,按项目分组列出所有对话,展示每条对话的模型、消息数、大小、首问摘要。
+- **多工具支持** — 同时管理 **Claude Code** 和 **Reasonix**。顶栏胶囊切换器选择当前工具,各页面只显示该工具的数据;安装状态自动探测。
+- **项目 & 对话管理** — 按项目分组列出所有对话,展示每条对话的模型、消息数、大小、首问摘要。
 - **智能标题** — `custom-title` → `ai-title` → `summary` → 首条用户消息,绝不会出现"无标题"。
 - **软归档** — 把对话及其全部关联数据移到归档区,随时可恢复到原位。
 - **真删除** — 永久删除对话 + 8 处关联数据。
@@ -62,8 +63,8 @@
 | 文件 | 说明 | 大小 |
 |------|------|------|
 | `Cove.exe` | 免安装单文件,双击即用 | ~10 MB |
-| `Cove_0.4.28_x64-setup.exe` | NSIS 安装包 | ~2.2 MB |
-| `Cove_0.4.28_x64_en-US.msi` | MSI 安装包 | ~3.5 MB |
+| `Cove_0.5.0_x64-setup.exe` | NSIS 安装包 | ~2.2 MB |
+| `Cove_0.5.0_x64_en-US.msi` | MSI 安装包 | ~3.5 MB |
 
 **仅支持 Windows 10/11 x64。** 安装/运行后托盘出现图标,点击即弹出面板。
 
@@ -84,6 +85,19 @@ npm run tauri build        # 打包 release 产物
 ## 🏗️ 架构
 
 **Tauri 2.11 + Rust + 原生 TypeScript(无 React/Vue)+ Vite。** 产物 < 11 MB,运行时内存 ~34 MB。
+
+### 多工具架构
+
+每个工具的数据布局和会话模型完全不同,扫描/转录/启动按工具分发:
+
+| | Claude Code | Reasonix |
+|---|---|---|
+| 会话 | `~/.claude/projects/<编码>/<SID>.jsonl` | `~/.reasonix/sessions/<name>.jsonl` + `.meta.json` |
+| ID | UUID | 文件名(无 UUID) |
+| 恢复 | `claude --resume <SID>` | `reasonix code -r`(该工作区最近会话) |
+| 清理 | 完整 8 处孤儿扫描 | 不适用(sidecar 随会话删除) |
+
+`ToolKind` 枚举(`src-tauri/src/tools/`)把每个操作路由到对应适配器。
 
 ### 核心:8 处关联数据
 
@@ -107,6 +121,10 @@ Cove/
 ├── src-tauri/src/          # Rust 后端
 │   ├── lib.rs              # 托盘/窗口/状态机/单实例/Mica
 │   ├── commands.rs         # Tauri command 桥接层
+│   ├── tools/              # 多工具分发(ToolKind + 各工具适配器)
+│   │   ├── mod.rs          #   ToolKind 枚举 + 安装探测 + 启动
+│   │   ├── claude.rs       #   Claude Code 适配器
+│   │   └── reasonix.rs     #   Reasonix 适配器
 │   ├── scan.rs             # jsonl 解析、标题回退
 │   ├── transcript.rs       # 会话全文解析(只读查看)
 │   ├── related.rs          # 8 处关联数据定位
@@ -114,7 +132,7 @@ Cove/
 │   ├── archive.rs          # 归档/恢复/索引
 │   ├── paths.rs            # 路径编码/解码
 │   ├── settings.rs         # settings.json 读写
-│   ├── projects_config.rs  # 项目列表读写
+│   ├── projects_config.rs  # 项目列表读写(按工具分文件)
 │   └── models.rs           # 数据结构
 ├── src-tauri/tests/        # 集成测试
 ├── src/                    # 前端(原生 TS)

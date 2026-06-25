@@ -2,7 +2,7 @@
 
 # 🐬 Cove
 
-### Una herramienta de bandeja del sistema de Windows para gestionar proyectos y conversaciones de Claude Code.
+### Una herramienta de bandeja del sistema de Windows para gestionar proyectos y conversaciones de Claude Code y Reasonix.
 
 `system tray` · `flyout panel` · `no telemetry` · `local only`
 
@@ -12,7 +12,7 @@
 [![Tauri](https://img.shields.io/badge/Tauri-2.11-FFC131?logo=tauri&logoColor=black)](#architecture)
 [![Rust](https://img.shields.io/badge/Rust-1.96+-CE422B?logo=rust&logoColor=white)](#build-from-source)
 [![TypeScript](https://img.shields.io/badge/TypeScript-native-3178C6?logo=typescript&logoColor=white)](#architecture)
-[![Release](https://img.shields.io/badge/release-v0.4.28-blue?logo=github&logoColor=white)](https://github.com/LUMIAO9527/Cove/releases/latest)
+[![Release](https://img.shields.io/badge/release-v0.5.0-blue?logo=github&logoColor=white)](https://github.com/LUMIAO9527/Cove/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?logo=opensourceinitiative&logoColor=white)](./LICENSE)
 [![No Telemetry](https://img.shields.io/badge/telemetry-none-success)](#runtime-data)
 
@@ -41,6 +41,7 @@
 
 ## ✨ Características
 
+- **Soporte multi-herramienta** — Gestiona **Claude Code** y **Reasonix** en paralelo. Un selector tipo cápsula en la barra de título elige la herramienta que muestra cada página; el estado de instalación se detecta automáticamente.
 - **Proyectos y conversaciones** — Escanea `~/.claude/projects/`, lista cada conversación agrupada por proyecto y muestra el modelo, el conteo de mensajes, el tamaño y el resumen de la primera pregunta de cada una.
 - **Títulos inteligentes** — `custom-title` → `ai-title` → `summary` → primer mensaje del usuario. Nunca muestra "Sin título".
 - **Archivado suave** — Mueve una conversación y todos sus datos relacionados a un área de archivado; totalmente restaurable a la ubicación original.
@@ -62,8 +63,8 @@ Descarga cualquiera de estos desde [Releases](../../releases):
 | Archivo | Descripción | Tamaño |
 |------|-------------|------|
 | `Cove.exe` | Archivo único portátil — doble clic para ejecutar | ~10 MB |
-| `Cove_0.4.28_x64-setup.exe` | Instalador NSIS | ~2.2 MB |
-| `Cove_0.4.28_x64_en-US.msi` | Instalador MSI | ~3.5 MB |
+| `Cove_0.5.0_x64-setup.exe` | Instalador NSIS | ~2.2 MB |
+| `Cove_0.5.0_x64_en-US.msi` | Instalador MSI | ~3.5 MB |
 
 **Solo Windows 10/11 x64.** Tras instalar/ejecutar, aparece un icono en la bandeja; haz clic en él para desplegar el panel.
 
@@ -84,6 +85,19 @@ npm run tauri build        # build release artifacts
 ## 🏗️ Arquitectura
 
 **Tauri 2.11 + Rust + TypeScript nativo (sin React/Vue) + Vite.** Artefacto < 11 MB, memoria en tiempo de ejecución ~34 MB.
+
+### Arquitectura multi-herramienta
+
+Cada herramienta tiene un diseño de datos y un esquema de sesión completamente distintos, por lo que el escaneo, la transcripción y el lanzamiento se distribuyen por herramienta:
+
+| | Claude Code | Reasonix |
+|---|---|---|
+| Sesiones | `~/.claude/projects/<encoded>/<SID>.jsonl` | `~/.reasonix/sessions/<name>.jsonl` + `.meta.json` |
+| ID | UUID | nombre de archivo (sin UUID) |
+| Reanudar | `claude --resume <SID>` | `reasonix code -r` (la última del espacio de trabajo) |
+| Limpieza | escaneo de huérfanos completo en 8 ubicaciones | no aplicable (los sidecars se eliminan con la sesión) |
+
+Un enumerado `ToolKind` (`src-tauri/src/tools/`) enruta cada operación al adaptador correcto.
 
 ### El núcleo: 8 ubicaciones de datos relacionadas
 
@@ -107,6 +121,10 @@ Cove/
 ├── src-tauri/src/          # Rust backend
 │   ├── lib.rs              # tray / window / state machine / single-instance / Mica
 │   ├── commands.rs         # Tauri command bridge
+│   ├── tools/              # multi-tool dispatch (ToolKind + per-tool adapters)
+│   │   ├── mod.rs          #   ToolKind enum + install probe + launch
+│   │   ├── claude.rs       #   Claude Code adapter
+│   │   └── reasonix.rs     #   Reasonix adapter
 │   ├── scan.rs             # jsonl parsing, title fallback
 │   ├── transcript.rs       # full session parsing (read-only viewer)
 │   ├── related.rs          # locate the 8 related data locations
@@ -114,7 +132,7 @@ Cove/
 │   ├── archive.rs          # archive / restore / index
 │   ├── paths.rs            # path encoding / decoding
 │   ├── settings.rs         # settings.json read/write
-│   ├── projects_config.rs  # project list read/write
+│   ├── projects_config.rs  # project list read/write (per-tool)
 │   └── models.rs           # data structures
 ├── src-tauri/tests/        # integration tests
 ├── src/                    # frontend (native TS)
