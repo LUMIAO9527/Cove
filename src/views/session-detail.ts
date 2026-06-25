@@ -20,12 +20,14 @@ export async function renderSessionDetailView(
     // Loading state.
     container.innerHTML = `
         <div class="scroll-area">
-            <div class="nav-bar">
-                <button class="back-btn" id="back-btn">${icon("back", 18)}</button>
-                <span class="section-label">${escapeHtml(sessionTitle)}</span>
-                <button class="btn btn-ghost section-action" id="resume-btn" title="在终端继续此会话">
-                    ${icon("play", 14)} 继续会话
-                </button>
+            <div class="nav-bar is-transcript">
+                <div class="nav-row">
+                    <button class="back-btn" id="back-btn">${icon("back", 18)}</button>
+                    <span class="nav-title" title="${escapeHtml(sessionTitle)}">${escapeHtml(sessionTitle)}</span>
+                    <button class="btn btn-ghost section-action" id="resume-btn" title="在终端继续此会话">
+                        ${icon("play", 14)} 继续会话
+                    </button>
+                </div>
             </div>
             <div class="transcript-loading">加载会话记录…</div>
         </div>`;
@@ -65,14 +67,25 @@ export async function renderSessionDetailView(
                </div>`
             : transcript.turns.map(renderTurn).join("");
 
+    // Meta line under the title: model · last-dir · relative time.
+    // Each segment is optional — only rendered when non-empty, joined by "·".
+    const metaParts: string[] = [escapeHtml(transcript.model)];
+    const dirName = lastDirOf(transcript.cwd);
+    if (dirName) metaParts.push(`<span title="${escapeHtml(transcript.cwd)}">${escapeHtml(dirName)}</span>`);
+    const relTime = relativeTime(transcript.last_updated);
+    if (relTime) metaParts.push(escapeHtml(relTime));
+    const metaHtml = `<div class="nav-meta">${metaParts.join(' <span class="nav-meta-sep">·</span> ')}</div>`;
+
     body.innerHTML = `
-        <div class="nav-bar">
-            <button class="back-btn" id="back-btn2">${icon("back", 18)}</button>
-            <span class="section-label">${escapeHtml(transcript.title)}</span>
-            <span class="model-tag" style="margin-left:auto;">${escapeHtml(transcript.model)}</span>
-            <button class="btn btn-ghost section-action" id="resume-btn2" title="在终端继续此会话">
-                ${icon("play", 14)} 继续
-            </button>
+        <div class="nav-bar is-transcript">
+            <div class="nav-row">
+                <button class="back-btn" id="back-btn2">${icon("back", 18)}</button>
+                <span class="nav-title" title="${escapeHtml(transcript.title)}">${escapeHtml(transcript.title)}</span>
+                <button class="btn btn-ghost section-action" id="resume-btn2" title="在终端继续此会话">
+                    ${icon("play", 14)} 继续
+                </button>
+            </div>
+            ${metaHtml}
         </div>
         <div class="transcript">
             ${turnsHtml}
@@ -152,4 +165,39 @@ function formatToolInput(input: unknown): string {
         return str.slice(0, MAX) + `\n…（已截断，共 ${str.length} 字符）`;
     }
     return str;
+}
+
+/** Last path segment of a working directory. Handles both / and \, strips a
+ *  trailing separator. Returns "" for empty input. Used for the compact meta
+ *  line; the full path is shown via the element's title attribute. */
+function lastDirOf(cwd: string): string {
+    if (!cwd) return "";
+    const trimmed = cwd.replace(/[\\/]+$/, "");
+    if (!trimmed) return "";
+    const segs = trimmed.split(/[\\/]+/);
+    return segs[segs.length - 1] || "";
+}
+
+/** Format an ISO timestamp as a short Chinese relative time.
+ *  Returns "" for empty/unparseable input. */
+function relativeTime(iso: string): string {
+    if (!iso) return "";
+    const then = Date.parse(iso);
+    if (Number.isNaN(then)) return "";
+    const diffMs = Date.now() - then;
+    // Future timestamps (clock skew) → treat as "just now".
+    if (diffMs < 0) return "刚刚";
+    const min = Math.floor(diffMs / 60000);
+    if (min < 1) return "刚刚";
+    if (min < 60) return `${min} 分钟前`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `${hr} 小时前`;
+    const day = Math.floor(hr / 24);
+    if (day === 1) return "昨天";
+    if (day < 7) return `${day} 天前`;
+    const wk = Math.floor(day / 7);
+    if (wk < 5) return `${wk} 周前`;
+    // Beyond ~5 weeks, a calendar date is clearer than "X 月前".
+    const d = new Date(then);
+    return `${d.getMonth() + 1}-${d.getDate()}`;
 }

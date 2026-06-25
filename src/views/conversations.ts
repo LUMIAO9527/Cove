@@ -14,7 +14,7 @@ export async function renderConversationsView(
 
     container.innerHTML = `
         <div class="scroll-area">
-            <div class="nav-bar">
+            <div class="nav-bar is-project">
                 <button class="back-btn" id="back-btn">${icon("back", 18)}</button>
                 <span class="section-label">${escapeHtml(project.name)}</span>
                 <button class="btn btn-ghost section-action" id="new-session-btn" title="在此项目开新会话">

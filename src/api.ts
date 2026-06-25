@@ -96,6 +96,10 @@ export interface SessionTranscript {
     title: string;
     model: string;
     turns: TranscriptTurn[];
+    /** Real working directory (first non-empty cwd in the jsonl), "" if absent. */
+    cwd: string;
+    /** ISO timestamp of the last turn, "" if absent. */
+    last_updated: string;
 }
 
 export const api = {

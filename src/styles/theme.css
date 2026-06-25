@@ -148,12 +148,15 @@ button:focus-visible { outline-offset: 1px; }
 }
 
 /* ============================ 顶栏 ============================ */
-/* 统一标尺：titlebar 高 34px，左右内边距 sp-3(12px)，元素间距 sp-2(8px)。
-   品牌图标 20×20（略小于行高留呼吸感），与标题基线对齐。
-   原来的 "C" 方块改成真实应用图标的 img，和托盘/exe 图标一致。 */
+/* 顶栏：统一对齐网格。
+   左 padding sp-2(8px)：Cove 图标对齐卡片左边框。
+   右 padding sp-2 + 6px：补偿 scroll-area 的滚动条 gutter（scrollbar-gutter:stable
+   让卡片右边框比左边多 6px），使模型名右边对齐卡片右边框。
+   （scroll-area::-webkit-scrollbar 宽 6px，此处与之绑定。）
+   height 36px，元素间距 sp-2。 */
 .titlebar {
     height: 36px;
-    padding: 3px var(--sp-3) 0;
+    padding: 3px calc(var(--sp-2) + 6px) 0 var(--sp-2);
     display: flex;
     align-items: center;
     gap: var(--sp-2);
@@ -246,31 +249,28 @@ button:focus-visible { outline-offset: 1px; }
     color: var(--text-dim);
     font-size: 11.5px;
     font-weight: 600;
-    padding: var(--sp-2) var(--sp-2) var(--sp-1);
-    /* 四页（项目/对话/归档/清理）section-label 必须等高、标题下的横线
-       （border-bottom）位置一致。设 min-height = 按钮高度 24px + 上下
-       padding（8+4=12px）= 36px。这样即使某页右侧没渲染操作按钮（如空
-       归档页），section-label 高度也和有按钮的页面一致，横线不会错位。 */
+    /* 水平 padding 清零：让首尾元素（图标 / 操作按钮）贴 scroll-area 边界（= 卡片边框），
+       全 App 统一对齐网格。上下 padding 保留。 */
+    padding: var(--sp-2) 0 var(--sp-1);
     min-height: 36px;
     box-sizing: border-box;
     display: flex;
     align-items: center;
     gap: var(--sp-2);
-    border-bottom: 1px solid var(--bg-stroke);
     margin-bottom: var(--sp-1);
-    /* 粘性：滚动长列表时分节标签吸顶，提供扫描锚点。
-       背景用 backdrop-blur + 极轻半透明叠层（沿用主背景的 Mica 透出思路），
-       不再用 --bg-solid 实色——那条 #2C2C2C 实色会在半透明窗口上压出
-       明显的灰色横条，破坏整体 Mica 观感。
-       缺点：老版 WebView2（Chromium <76）无 backdrop-filter；含 fallback 实色。 */
     position: sticky;
     top: 0;
-    background: rgba(32, 32, 32, 0.78);
-    backdrop-filter: blur(12px) saturate(140%);
-    -webkit-backdrop-filter: blur(12px) saturate(140%);
     z-index: 2;
 }
 .section-label .icon { color: var(--text-dim); }
+
+/* 项目详情页（conversations）的 section-label 是导航标题（项目名），
+   需要撑满 back-btn 和 section-action 之间的空间。
+   背景/横线已在 section-label 基础规则统一去除，这里只保留布局。 */
+.nav-bar.is-project .section-label {
+    flex: 1;
+    min-width: 0;
+}
 
 /* section-label 右侧的操作按钮（项目页"添加"、散落对话页"新对话"等）：
    统一标尺——ghost 风格（不抢视觉焦点）、小尺寸、与标题同行右对齐。
@@ -360,32 +360,35 @@ button:focus-visible { outline-offset: 1px; }
 
 /* 项目独立页（conversations.ts）的路径操作行：
    可点击复制的路径 chip + 「打开文件夹」按钮，一行排开。
-   替代原来孤零零的一行灰色路径文字。 */
+   左右 padding 清零：让路径框左边、打开文件夹按钮右边贴齐会话卡片
+   的左右边框（卡片直接吃 scroll-area 的 4px 边距即到边界，path-bar
+   若再叠 8px padding 会让这两个元素比卡片内缩 8px）。上下 padding 保留。 */
 .path-bar {
     display: flex;
     align-items: center;
     gap: var(--sp-2);
-    padding: var(--sp-1) var(--sp-2) var(--sp-2);
+    padding: var(--sp-1) 0 var(--sp-2);
 }
+/* 路径文字：去掉背景框/边框，与上方 nav-bar、下方会话卡片统一为
+   透明无框风格。只有 hover 时给弱底色反馈（点击复制）。 */
 .path-chip {
     flex: 1;
     min-width: 0;
-    /* 和右侧「打开文件夹」按钮等高（26px），避免一高一低。
-       box-sizing:border-box 让 padding 算在 height 内，内容垂直居中。 */
+    /* 和右侧「打开文件夹」按钮等高（26px），避免一高一低。 */
     height: 26px;
     box-sizing: border-box;
     display: inline-flex;
     align-items: center;
     gap: 5px;
     padding: 0 var(--sp-2);
-    background: var(--bg-hover);
-    border: 1px solid var(--bg-stroke);
+    background: transparent;
+    border: none;
     border-radius: var(--radius-sm);
     color: var(--text-dim);
     font-family: var(--mono);
     font-size: 10.5px;
     cursor: pointer;
-    transition: background 0.1s ease, color 0.1s ease, border-color 0.1s ease;
+    transition: background 0.1s ease, color 0.1s ease;
     overflow: hidden;
 }
 .path-chip .path-chip-text {
@@ -394,15 +397,18 @@ button:focus-visible { outline-offset: 1px; }
     white-space: nowrap;
 }
 .path-chip:hover {
-    background: var(--bg-active);
-    border-color: var(--bg-stroke-strong);
+    background: var(--bg-hover);
     color: var(--text);
 }
-.path-open-btn {
+/* 用 .path-bar .path-open-btn 提高特异性（0,2,0 > .btn 的 0,1,0），
+   否则 .path-open-btn 定义在 .btn 之前，height:26px 会被 .btn 的 height:32px
+   覆盖——这是 hover 背景区比左侧 path-chip 高一截的真根因（实测差 6px）。 */
+.path-bar .path-open-btn {
     flex-shrink: 0;
-    height: 26px;
+    box-sizing: border-box;
+    height: 26px;               /* 与 .path-chip 等高，hover 背景区严格对齐 */
     padding: 0 10px;
-    font-size: 11px;
+    font-size: 10.5px;          /* 对齐 .path-chip 字号，视觉更统一 */
     white-space: nowrap;
 }
 .card .preview {
@@ -695,17 +701,27 @@ button:focus-visible { outline-offset: 1px; }
     text-align: center;
 }
 
-/* 消息流容器 */
+/* 消息流容器
+   不加左右 padding：turn 自身的 padding 已处理内部缩进，nav-bar 也在
+   scroll-area 里吃同样的 8px 边距。若 transcript 再叠一层左右 padding，
+   turn 盒子会比 nav-bar 窄一截（实测窄 16px），上下宽度不一致。
+   只保留底部 padding，避免最后一条 turn 贴底。
+   user-select:text 放开会话详情页文本选中，供自由复制
+   （body 全局 user-select:none，transcript 区显式覆盖回 text）。 */
 .transcript {
-    padding: 0 var(--sp-2) var(--sp-4);
+    padding: 0 0 var(--sp-4);
+    user-select: text;
+    -webkit-user-select: text;
 }
 
 /* 单条消息回合（user / assistant） */
 /* 单条消息回合：用左侧色条区分角色，不用整框，避免色块过重。
-   user=中性条，assistant=accent 条，更轻盈、扫描更快。 */
+   user=中性条，assistant=accent 条，更轻盈、扫描更快。
+   padding 左右对称（含色条在内），让 turn 正文区左右边界一致、
+   与 transcript 容器等宽，避免内容左右缩进不齐。 */
 .turn {
     margin: var(--sp-2) 0;
-    padding: var(--sp-2) 0 var(--sp-2) var(--sp-3);
+    padding: var(--sp-2) var(--sp-3) var(--sp-2) var(--sp-3);
     border-left: 2px solid var(--bg-stroke-strong);
     border-radius: 0;
 }
@@ -727,6 +743,9 @@ button:focus-visible { outline-offset: 1px; }
 
 .turn-body { font-size: 12.5px; line-height: 1.55; color: var(--text); }
 .turn-body .block-text { white-space: pre-wrap; word-break: break-word; }
+
+/* 折叠区头部是点击按钮，保持 none 防止拖选时连带选中。 */
+.transcript .collapsible-header { user-select: none; -webkit-user-select: none; }
 .turn-body .block-text + .block-text,
 .turn-body .block-text + .collapsible,
 .turn-body .collapsible + .block-text,
@@ -954,18 +973,63 @@ button:focus-visible { outline-offset: 1px; }
 /* sticky 吸顶：会话详情页滚动时，返回栏+继续按钮始终可见，不需要滚回顶部。
    复用 section-label 的毛玻璃背景方案（rgba + backdrop-filter），
    不用实色，避免在 Mica 透出背景上压出灰条。 */
+/* 导航返回栏（项目详情 / 会话详情 / 散落对话 等子页面共用）。
+   统一对齐网格：水平 padding 清零，让首尾元素贴 scroll-area 边界（= 会话卡片边框）。
+   去掉毛玻璃背景条——全 App 统一为透明无框风格，避免在 Mica 上压出硬边灰条。
+   sticky 吸顶保留，滚动时返回按钮仍可见。 */
 .nav-bar {
     display: flex;
     align-items: center;
     gap: var(--sp-1);
-    padding: var(--sp-2) var(--sp-2) var(--sp-1);
+    padding: var(--sp-2) 0 var(--sp-1);
     position: sticky;
     top: 0;
     z-index: 3;
-    background: rgba(32, 32, 32, 0.78);
-    backdrop-filter: blur(12px) saturate(140%);
-    -webkit-backdrop-filter: blur(12px) saturate(140%);
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
+/* —— 会话详情页专属的两行导航栏 ——
+   全局 .nav-bar 是单行（项目详情/散落对话等子页面共用）。会话详情页
+   需要标题+meta 两行，加 .is-transcript 修饰类切换成列布局，
+   不污染其他页面的 nav-bar。 */
+.nav-bar.is-transcript {
+    flex-direction: column;
+    gap: 2px;
+    align-items: stretch;
+}
+/* 第一行：返回 + 标题（截断）+ 操作按钮。标题超长用 ellipsis 截断，
+   完整标题靠 title 属性 hover 看，不撑爆 380px 窄窗口。 */
+.nav-bar.is-transcript .nav-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-1);
+    min-width: 0;               /* 让 flex 子项可收缩、ellipsis 生效 */
+}
+.nav-bar.is-transcript .nav-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 0 var(--sp-1);
+    /* 标题区可选中复制（与 transcript 放开选中配套，见下方 .transcript 规则） */
+    user-select: text;
+    -webkit-user-select: text;
+}
+/* 第二行 meta：模型 · 目录 · 时间。小字、弱色，不抢标题视觉。 */
+.nav-bar.is-transcript .nav-meta {
+    font-size: 10.5px;
+    color: var(--text-faint);
+    padding: 0 4px 2px 32px;     /* 左缩进对齐到标题（back-btn 28px + gap 4px） */
+    line-height: 1.4;
+    user-select: text;
+    -webkit-user-select: text;
+}
+.nav-meta-sep { opacity: 0.5; margin: 0 2px; }
 .nav-bar .back-btn {
     background: none;
     border: none;

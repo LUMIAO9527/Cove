@@ -27,6 +27,9 @@ struct Record {
     summary: Option<String>,
     #[serde(rename = "lastPrompt", default)]
     last_prompt: Option<String>,
+    /// Real working directory embedded in user/assistant records.
+    #[serde(default)]
+    cwd: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -52,6 +55,8 @@ pub fn parse(path: &std::path::Path, sid: &str) -> Option<SessionTranscript> {
     let mut ai_title: Option<String> = None;
     let mut summary_title: Option<String> = None;
     let mut last_prompt_text: Option<String> = None;
+    let mut cwd = String::new();
+    let mut last_updated = String::new();
 
     for line in content.lines() {
         let record: Record = match serde_json::from_str(line) {
@@ -77,6 +82,16 @@ pub fn parse(path: &std::path::Path, sid: &str) -> Option<SessionTranscript> {
         if let Some(lp) = &record.last_prompt {
             if !lp.is_empty() {
                 last_prompt_text = Some(lp.clone());
+            }
+        }
+
+        // Capture the first non-empty cwd (scan.rs does the same — a session
+        // doesn't change directories mid-conversation).
+        if cwd.is_empty() {
+            if let Some(c) = &record.cwd {
+                if !c.is_empty() {
+                    cwd = c.clone();
+                }
             }
         }
 
@@ -122,6 +137,15 @@ pub fn parse(path: &std::path::Path, sid: &str) -> Option<SessionTranscript> {
             continue;
         }
 
+        // Track the most recent turn timestamp for the detail-view meta line.
+        // Records are appended in file order, which is chronological for
+        // Claude Code jsonl, so the last non-empty one wins.
+        if let Some(ts) = &record.timestamp {
+            if !ts.is_empty() {
+                last_updated = ts.clone();
+            }
+        }
+
         turns.push(TranscriptTurn {
             role,
             timestamp: record.timestamp.clone().unwrap_or_default(),
@@ -144,6 +168,8 @@ pub fn parse(path: &std::path::Path, sid: &str) -> Option<SessionTranscript> {
             model
         },
         turns,
+        cwd,
+        last_updated,
     })
 }
 

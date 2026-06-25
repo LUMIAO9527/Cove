@@ -116,6 +116,15 @@ pub struct SessionTranscript {
     pub title: String,
     pub model: String,
     pub turns: Vec<TranscriptTurn>,
+    /// Real working directory of this session (first non-empty cwd in the
+    /// jsonl). Empty string if absent. Used for the detail-view meta line.
+    #[serde(default)]
+    pub cwd: String,
+    /// ISO timestamp of the LAST user/assistant turn ("" if none). Frontend
+    /// formats it as a relative time. Cheaper than carrying unix millis and
+    /// reusing the string already parsed per-turn.
+    #[serde(default)]
+    pub last_updated: String,
 }
 
 /// One user or assistant turn in a transcript. Skips non-message records
