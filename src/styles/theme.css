@@ -213,9 +213,11 @@ button:focus-visible { outline-offset: 1px; }
     flex-shrink: 0;
 }
 /* 工具切换器：外胶囊包两个小胶囊图标（Claude / Reasonix），点哪个亮哪个。
- * margin-left:auto 把它推到 titlebar 右端，与模型胶囊成组。 */
+ * 放在 titlebar 最右端（固定宽度），紧贴左侧的模型胶囊——模型胶囊宽度会随
+ * 模型名变化（含轮播），放它左边、让固定宽度的工具胶囊靠右，titlebar 右端
+ * 布局才稳定。 */
 .tool-capsule {
-    margin-left: auto;
+    margin-left: 6px;
     display: flex;
     align-items: center;
     gap: 2px;
@@ -267,13 +269,16 @@ button:focus-visible { outline-offset: 1px; }
     /* 顶部当前模型是用户高频扫视的关键状态信息，用亮白（--text）突出，
        而非次要灰。titlebar 的工具/模型两个胶囊承担"当前在用什么"的指示，
        都应是最高对比度。 */
+    /* margin-left:auto 把模型胶囊推到 titlebar 右端，工具胶囊紧贴其右——
+       模型胶囊宽度随模型名变化（含轮播），放左边让它向左伸缩，右端固定宽
+       度的工具胶囊不跟着抖动，布局更稳定。 */
     color: var(--text);
     font-size: 11px;
     font-family: var(--mono);
     display: flex;
     align-items: center;
     gap: 5px;
-    margin-left: 6px;
+    margin-left: auto;
     overflow: hidden;
     /* 最大宽度 + 超出后轮播：固定宽度容器，内部文字超长时 JS 触发滚动动画。 */
     max-width: 150px;

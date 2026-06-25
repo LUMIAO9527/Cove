@@ -82,8 +82,8 @@ titlebar.className = "titlebar";
 titlebar.innerHTML = `
     <img class="titlebar-brand" src="${COVE_ICON}" alt="Cove" draggable="false">
     <span class="titlebar-title" id="titlebar-title">Cove</span>
-    <span class="tool-capsule" id="tool-capsule"></span>
     <span class="titlebar-model" id="titlebar-model"></span>
+    <span class="tool-capsule" id="tool-capsule"></span>
 `;
 
 // Content area
