@@ -217,7 +217,9 @@ button:focus-visible { outline-offset: 1px; }
  * 模型名变化（含轮播），放它左边、让固定宽度的工具胶囊靠右，titlebar 右端
  * 布局才稳定。 */
 .tool-capsule {
-    margin-left: 6px;
+    /* 负 margin 消掉 titlebar 的 gap(sp-2=8px)，让工具胶囊紧贴模型胶囊，
+       两胶囊视觉间距压到 4px（8 - 4）。model 宽度变化时两胶囊成组移动。 */
+    margin-left: -4px;
     display: flex;
     align-items: center;
     gap: 2px;
