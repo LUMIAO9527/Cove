@@ -8,6 +8,29 @@ pub fn claude_dir() -> PathBuf {
     PathBuf::from(home).join(".claude")
 }
 
+/// 返回 Reasonix 数据根目录。优先 $REASONIX_HOME（Reasonix 官方支持的环境变量覆盖），
+/// 否则按平台：Windows %AppData%\reasonix\，其他 ~/.reasonix（见 Reasonix CONFIG_PATHS.md）。
+pub fn reasonix_dir() -> PathBuf {
+    if let Ok(home) = std::env::var("REASONIX_HOME") {
+        if !home.trim().is_empty() {
+            return PathBuf::from(home);
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        // %AppData% = Roaming（Reasonix 官方 Windows 路径用 Roaming）
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            if !appdata.trim().is_empty() {
+                return PathBuf::from(appdata).join("reasonix");
+            }
+        }
+    }
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .expect("USERPROFILE or HOME must be set");
+    PathBuf::from(home).join(".reasonix")
+}
+
 /// 将工作目录路径编码为 projects 下的目录名。
 /// 规则: 将 ':' '\' '/' 各自替换为 '-'。
 ///   "D:\\Programs\\ClaudeCode" -> "D--Programs-ClaudeCode"

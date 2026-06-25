@@ -1,4 +1,4 @@
-import { api, Project } from "../api";
+import { api, Project, ToolName } from "../api";
 import { icon } from "../styles/icons";
 import { toast, selectDialog, promptDialog } from "./confirm";
 import { escapeHtml, formatSize, formatTime, showConvoInfo, bindCopyable, animateRemoveCard } from "./projects";
@@ -6,11 +6,12 @@ import { escapeHtml, formatSize, formatTime, showConvoInfo, bindCopyable, animat
 /** Project detail: historical sessions for one project (precise, encode-based). */
 export async function renderConversationsView(
     container: HTMLElement,
+    tool: ToolName,
     project: Project,
     onBack: () => void,
     onSelectSession: (sid: string, encoded: string, projPath: string, title: string) => void
 ): Promise<void> {
-    const convos = await api.getProjectDetail(project.path);
+    const convos = await api.getProjectDetail(tool, project.path);
 
     container.innerHTML = `
         <div class="scroll-area">
@@ -104,7 +105,7 @@ export async function renderConversationsView(
     // New session in this project
     document.getElementById("new-session-btn")!.addEventListener("click", async () => {
         try {
-            await api.openClaudeSession(project.path);
+            await api.openSession(tool, project.path);
         } catch (err) {
             toast("启动失败：" + String(err));
         }
@@ -119,7 +120,7 @@ export async function renderConversationsView(
 
             if (action === "resume") {
                 try {
-                    await api.openClaudeSession(project.path, sid);
+                    await api.openSession(tool, project.path, sid);
                 } catch (err) {
                     toast("启动失败：" + String(err));
                 }
@@ -139,7 +140,7 @@ export async function renderConversationsView(
                 });
                 if (!name || !name.trim()) return;
                 try {
-                    const newName = await api.renameSession(sid, encoded, name);
+                    const newName = await api.renameSession(tool, sid, encoded, name);
                     // Update the card title in-place; a refresh would also work
                     // but this keeps scroll position and feels instant.
                     if (titleEl) titleEl.textContent = newName;
@@ -204,7 +205,7 @@ export async function renderConversationsView(
             } else if (action === "archive") {
                 const card = btn.closest(".card") as HTMLElement;
                 const success = await animateRemoveCard(card, () =>
-                    api.archiveConvo(sid, encoded)
+                    api.archiveConvo(tool, sid, encoded)
                 );
                 if (success) toast("已归档会话");
             }

@@ -1,4 +1,4 @@
-import { api, Conversation } from "../api";
+import { api, Conversation, ToolName } from "../api";
 import { icon } from "../styles/icons";
 import { confirmDialog, toast } from "./confirm";
 import { escapeHtml, formatSize, formatTime, showConvoInfo, animateRemoveCard } from "./projects";
@@ -18,8 +18,8 @@ import { escapeHtml, formatSize, formatTime, showConvoInfo, animateRemoveCard } 
  * 归档区的操作只有「恢复」和「永久删除」——已归档的会话要恢复回去才能
  * 继续/重命名，不在这两个操作之外做别的。
  */
-export async function renderArchiveView(container: HTMLElement): Promise<void> {
-    const convos = await api.getArchiveConversations();
+export async function renderArchiveView(container: HTMLElement, tool: ToolName): Promise<void> {
+    const convos = await api.getArchiveConversations(tool);
 
     container.innerHTML = `
         <div class="scroll-area">
@@ -62,13 +62,13 @@ export async function renderArchiveView(container: HTMLElement): Promise<void> {
 
             if (action === "restore") {
                 const success = await animateRemoveCard(card, () =>
-                    api.restoreConvo(sid, encoded)
+                    api.restoreConvo(tool, sid, encoded)
                 );
                 if (success) {
                     toast("已恢复到原项目");
                     // 全部恢复完后重渲染（刷新计数 + 可能清空）。
                     if (container.querySelectorAll(".sub-session").length === 0) {
-                        renderArchiveView(container);
+                        renderArchiveView(container, tool);
                     }
                 }
                 return;
@@ -84,10 +84,10 @@ export async function renderArchiveView(container: HTMLElement): Promise<void> {
                 });
                 if (!ok) return;
                 const success = await animateRemoveCard(card, () =>
-                    api.purgeArchivedConvo(sid, encoded)
+                    api.purgeArchivedConvo(tool, sid, encoded)
                 );
                 if (success && container.querySelectorAll(".sub-session").length === 0) {
-                    renderArchiveView(container);
+                    renderArchiveView(container, tool);
                 }
             }
         });
@@ -107,13 +107,13 @@ export async function renderArchiveView(container: HTMLElement): Promise<void> {
             if (!ok) return;
             let failed = 0;
             for (const c of convos) {
-                const r = await api.purgeArchivedConvo(c.id, c.project_encoded);
+                const r = await api.purgeArchivedConvo(tool, c.id, c.project_encoded);
                 if (!r) failed += 1;
             }
             if (failed > 0) {
                 toast(`已清空，${failed} 条删除失败`);
             }
-            renderArchiveView(container);
+            renderArchiveView(container, tool);
         });
     }
 }

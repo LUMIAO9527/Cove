@@ -22,6 +22,28 @@
     --text-dim:    rgba(255, 255, 255, 0.60);   /* secondary */
     --text-faint:  rgba(255, 255, 255, 0.45);   /* tertiary / disabled-ish */
 
+    /* ── 字体分级（语义 token，替代散落的硬编码 size/weight/color）──
+       设计原则：按"用户视线权重"分级，而非任意 px 值。
+       size 归并为 5 档（去掉 10.5/11.5/12.5/13.5 这些无意义 0.5 差异），
+       每档绑定 weight + color，保证同层级元素视觉一致。
+
+       层级        size   weight  color        用途
+       ─────────────────────────────────────────────────────────
+       title       13px   600     --text       页面/区块标题（项目·会话·归档·磁盘清理）
+       heading     12.5px 600     --text       卡片标题、会话标题、弹窗标题
+       body        12px   400     --text       正文、turn-body、输入框、主要可读内容
+       meta        11px   400     --text-dim   元信息（消息数·大小·时间·模型名·路径）
+       label       10.5px 600     --text-dim   标签、计数、uppercase 小标（带 letter-spacing）
+       mono        11px   400     --text-dim   等宽（命令·模型 id·技术值）
+       caption     10.5px 400     --text-faint 辅助说明、占位、disabled 提示            */
+    --fs-title:    13px;   --fw-title:    600;  --fc-title:    var(--text);
+    --fs-heading:  12.5px; --fw-heading:  600;  --fc-heading:  var(--text);
+    --fs-body:     12px;   --fw-body:     400;  --fc-body:     var(--text);
+    --fs-meta:     11px;   --fw-meta:     400;  --fc-meta:     var(--text-dim);
+    --fs-label:    10.5px; --fw-label:    600;  --fc-label:    var(--text-dim);
+    --fs-mono:     11px;   --fw-mono:     400;  --fc-mono:     var(--text-dim);
+    --fs-caption:  10.5px; --fw-caption:  400;  --fc-caption:  var(--text-faint);
+
     /* 强调色 — 提亮增蓝，在 Mica 灰调背景上提供足够的对比锚点
        （原 #6d7d91 过灰，focus ring / 选中态在半透明背景上辨识度不足） */
     --accent:        #7AA0D4;
@@ -53,7 +75,12 @@
     /* 字体 — Win11 flyout 用 Segoe UI Variable，回退 Segoe UI */
     --font: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI",
             "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
-    --mono: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    /* mono 加中文 fallback：mono 栈全是纯英文等宽字体，遇到中文（如"未配置"、
+       中文项目名）会回退到系统默认字体，字重/基线和英文对不齐——模型胶囊里的
+       "未配置"显得字体不同且垂直不居中就是这原因。补 Microsoft YaHei UI 让
+       中文走和 --font 一致的中文字体，英文仍用 Cascadia Mono。 */
+    --mono: "Cascadia Mono", "Cascadia Code", "Consolas",
+            "Microsoft YaHei UI", "Microsoft YaHei", monospace;
 }
 
 * {
@@ -177,29 +204,111 @@ button:focus-visible { outline-offset: 1px; }
     pointer-events: none;
 }
 .titlebar-title {
-    color: var(--text);
-    font-weight: 600;
-    font-size: 13px;
+    /* 应用名 "Cove"：title 级，最高权重，亮白。 */
+    color: var(--fc-title);
+    font-weight: var(--fw-title);
+    font-size: var(--fs-title);
     letter-spacing: 0.1px;
     white-space: nowrap;
     flex-shrink: 0;
 }
-.titlebar-model {
+/* 工具切换器：外胶囊包两个小胶囊图标（Claude / Reasonix），点哪个亮哪个。
+ * margin-left:auto 把它推到 titlebar 右端，与模型胶囊成组。 */
+.tool-capsule {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    background: var(--bg-elevated);
+    padding: 2px;
+    border-radius: 14px;
+    flex-shrink: 0;
+    -webkit-user-select: none;
+    user-select: none;
+}
+.tool-pill {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: transparent;
+    color: var(--text-faint);
+    border-radius: 12px;
+    cursor: pointer;
+    padding: 0;
+    transition: background 0.12s, color 0.12s;
+}
+.tool-pill:hover:not(.is-disabled):not(.is-active) {
+    background: var(--bg-hover, rgba(128, 128, 128, 0.14));
     color: var(--text-dim);
+}
+/* 选中态：每个工具用自己的品牌色背景 + 白图标。
+   Claude = Claude orange #cc785c；Reasonix = 品牌渐变（青→蓝→紫）。 */
+.tool-pill.is-active { color: #fff; }
+.tool-pill[data-tool="claude"].is-active { background: #cc785c; }
+.tool-pill[data-tool="reasonix"].is-active {
+    background: linear-gradient(135deg, #5eead4 0%, #6366f1 55%, #c4b5fd 100%);
+}
+.tool-pill.is-disabled {
+    opacity: 0.32;
+    cursor: not-allowed;
+}
+.tool-glyph { display: block; pointer-events: none; }
+/* Reasonix 菱形 mark：未选中时跟随文字灰；选中时用品牌渐变描边。 */
+.tool-glyph-reasonix .rx-diamond-outer,
+.tool-glyph-reasonix .rx-diamond-inner { stroke: currentColor; }
+.tool-pill[data-tool="reasonix"].is-active .rx-diamond-outer,
+.tool-pill[data-tool="reasonix"].is-active .rx-diamond-inner {
+    stroke: #fff;
+}
+.titlebar-model {
+    /* 顶部当前模型是用户高频扫视的关键状态信息，用亮白（--text）突出，
+       而非次要灰。titlebar 的工具/模型两个胶囊承担"当前在用什么"的指示，
+       都应是最高对比度。 */
+    color: var(--text);
     font-size: 11px;
     font-family: var(--mono);
     display: flex;
     align-items: center;
     gap: 5px;
-    margin-left: auto;
+    margin-left: 6px;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    flex-shrink: 1;
-    min-width: 0;
+    /* 最大宽度 + 超出后轮播：固定宽度容器，内部文字超长时 JS 触发滚动动画。 */
+    max-width: 150px;
     background: var(--bg-elevated);
-    padding: 3px 8px;
-    border-radius: 12px;
+    padding: 4px 10px;
+    border-radius: 14px;
+    /* 与工具胶囊同高（22px 内容 + padding），保证两个胶囊视觉对齐。 */
+    min-height: 26px;
+}
+.titlebar-model .model-marquee {
+    overflow: hidden;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.titlebar-model .model-marquee-inner {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+    /* 锁死行高：mono + 中文 fallback 混排时默认行高会把中文顶出垂直中心，
+       显式 1 让内容严格按字号居中（父级 .titlebar-model 已有 align-items:center）。 */
+    line-height: 1;
+}
+/* 文字宽度超过容器时，JS 给 inner 加 .is-overflow 触发左右轮播动画 */
+.titlebar-model .model-marquee-inner.is-overflow {
+    animation: model-marquee 9s ease-in-out infinite;
+}
+@keyframes model-marquee {
+    0%, 15% { transform: translateX(0); }
+    45%, 55% { transform: translateX(calc(-1 * (100% - 140px))); }
+    85%, 100% { transform: translateX(0); }
 }
 .titlebar-model .model-dot-inner {
     width: 5px;
@@ -246,9 +355,11 @@ button:focus-visible { outline-offset: 1px; }
 
 /* ============================ 区段标题 ============================ */
 .section-label {
-    color: var(--text-dim);
-    font-size: 11.5px;
-    font-weight: 600;
+    /* 区块标题（项目·会话·归档·磁盘清理）：heading 级，亮白突出。
+       它是用户进入该 tab 后第一眼要定位的"我在哪个区"，应最高对比度。 */
+    color: var(--fc-heading);
+    font-size: var(--fs-heading);
+    font-weight: var(--fw-heading);
     /* 水平 padding 清零：让首尾元素（图标 / 操作按钮）贴 scroll-area 边界（= 卡片边框），
        全 App 统一对齐网格。上下 padding 保留。 */
     padding: var(--sp-2) 0 var(--sp-1);
@@ -318,19 +429,26 @@ button:focus-visible { outline-offset: 1px; }
 .card:active { background: var(--bg-active); }
 .card.is-static { cursor: default; border-color: transparent; }
 .card.is-static:hover { background: transparent; border-color: transparent; }
+/* 展开后的项目卡本身不再随 hover 变色——展开态下用户的注意力在里面的
+   会话列表，hover 高亮应只作用到具体会话行（.sub-session:hover），而非
+   整个项目卡，否则整个卡片区块一起亮起来视觉噪声太大。 */
+.card.is-expanded { cursor: default; }
+.card.is-expanded:hover { background: var(--bg-card); border-color: var(--bg-stroke); }
 
 .card .title {
-    font-weight: 600;
-    font-size: 13.5px;
-    color: var(--text);
+    /* 项目名/卡片主标题：heading 级，亮白加粗，列表中最突出的文字。 */
+    font-weight: var(--fw-heading);
+    font-size: var(--fs-heading);
+    color: var(--fc-heading);
     margin-bottom: 5px;
     word-break: break-word;
     line-height: 1.35;
     letter-spacing: -0.1px;
 }
 .card .meta {
-    color: var(--text-dim);
-    font-size: 11px;
+    /* 卡片元信息（消息数·大小·时间·模型）：meta 级，灰，等宽可选。 */
+    color: var(--fc-meta);
+    font-size: var(--fs-meta);
     display: flex;
     align-items: center;
     gap: var(--sp-1);
@@ -665,17 +783,17 @@ button:focus-visible { outline-offset: 1px; }
     border-color: var(--bg-stroke);
 }
 .expand-body .sub-session + .sub-session { margin-top: 3px; }
-.expand-body .sub-main .meta { font-size: 10.5px; }
-.expand-body .sub-session .sub-title { font-size: 12px; margin-bottom: 1px; }
+.expand-body .sub-main .meta { font-size: var(--fs-label); color: var(--fc-label); }
+.expand-body .sub-session .sub-title { font-size: var(--fs-body); font-weight: var(--fw-heading); color: var(--fc-heading); margin-bottom: 1px; }
 .sub-empty {
-    color: var(--text-faint);
-    font-size: 11.5px;
+    color: var(--fc-caption);
+    font-size: var(--fs-meta);
     padding: var(--sp-2);
 }
 /* "查看全部"链接右对齐（在第三个对话卡片底下右对齐显示）。 */
 .expand-body .view-all {
     color: var(--accent-hover);
-    font-size: 11.5px;
+    font-size: var(--fs-meta);
     cursor: pointer;
     display: block;
     text-align: right;
@@ -741,7 +859,7 @@ button:focus-visible { outline-offset: 1px; }
 }
 .turn-assistant .turn-role { color: var(--accent); }
 
-.turn-body { font-size: 12.5px; line-height: 1.55; color: var(--text); }
+.turn-body { font-size: var(--fs-body); line-height: 1.55; color: var(--fc-body); }
 .turn-body .block-text { white-space: pre-wrap; word-break: break-word; }
 
 /* 折叠区头部是点击按钮，保持 none 防止拖选时连带选中。 */
@@ -1007,11 +1125,12 @@ button:focus-visible { outline-offset: 1px; }
     min-width: 0;               /* 让 flex 子项可收缩、ellipsis 生效 */
 }
 .nav-bar.is-transcript .nav-title {
+    /* 会话详情页顶部标题：title 级，亮白加粗，页面最突出的文字。 */
     flex: 1 1 auto;
     min-width: 0;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text);
+    font-size: var(--fs-title);
+    font-weight: var(--fw-title);
+    color: var(--fc-title);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1020,10 +1139,10 @@ button:focus-visible { outline-offset: 1px; }
     user-select: text;
     -webkit-user-select: text;
 }
-/* 第二行 meta：模型 · 目录 · 时间。小字、弱色，不抢标题视觉。 */
+/* 第二行 meta：模型 · 目录 · 时间。label 级，弱色，不抢标题视觉。 */
 .nav-bar.is-transcript .nav-meta {
-    font-size: 10.5px;
-    color: var(--text-faint);
+    font-size: var(--fs-label);
+    color: var(--fc-caption);
     padding: 0 4px 2px 32px;     /* 左缩进对齐到标题（back-btn 28px + gap 4px） */
     line-height: 1.4;
     user-select: text;
@@ -1049,9 +1168,9 @@ button:focus-visible { outline-offset: 1px; }
 /* ============================ 空状态 ============================ */
 .empty-state {
     text-align: center;
-    color: var(--text-dim);
+    color: var(--fc-meta);
     padding: var(--sp-5) var(--sp-4);
-    font-size: 13px;
+    font-size: var(--fs-title);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1068,11 +1187,67 @@ button:focus-visible { outline-offset: 1px; }
 }
 .empty-state .empty-icon .icon { color: var(--text-faint); }
 .empty-state .empty-title {
-    color: var(--text);
-    font-weight: 600;
-    font-size: 14px;
+    /* 空状态主标题（未安装/暂无会话/读取失败）：title 级，亮白加粗。 */
+    color: var(--fc-title);
+    font-weight: var(--fw-title);
+    font-size: var(--fs-title);
 }
-.empty-state .hint { font-size: 12px; color: var(--text-faint); }
+.empty-state .hint { font-size: var(--fs-body); color: var(--fc-caption); }
+/* 未安装页的安装命令行容器：主按钮（命令文本，点击复制）+ 小按钮（打开终端），
+ *   两按钮等高并排。主按钮 flex:1 撑满，小按钮固定宽度。 */
+.empty-state .install-row {
+    display: flex;
+    gap: 6px;
+    width: 100%;
+    max-width: 320px;
+    margin-top: var(--sp-2);
+}
+/* 主按钮：命令行（等宽 + 复制图标）。hover 提示可复制。 */
+.empty-state .install-cmd {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: var(--fs-mono);
+    color: var(--fc-mono);
+    background: var(--bg-elevated);
+    padding: 7px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--bg-stroke);
+    cursor: pointer;
+    transition: background 120ms, border-color 120ms;
+}
+.empty-state .install-cmd:hover { background: var(--bg-hover); border-color: var(--accent); }
+/* 命令文本允许截断但不换行（命令可能较长）。 */
+.empty-state .install-cmd .install-cmd-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.empty-state .install-cmd .icon { color: var(--text-faint); flex-shrink: 0; }
+/* 小按钮：打开空白终端。固定宽度，与主按钮等高。 */
+.empty-state .install-open {
+    flex-shrink: 0;
+    width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--fc-meta);
+    background: var(--bg-elevated);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--bg-stroke);
+    cursor: pointer;
+    transition: background 120ms, border-color 120ms, color 120ms;
+}
+.empty-state .install-open:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent);
+    color: var(--accent);
+}
 
 /* ============================ 动作行 ============================ */
 .actions {

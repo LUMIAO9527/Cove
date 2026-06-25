@@ -648,3 +648,189 @@ pub fn atomic_write(path: &Path, content: String) -> Result<(), std::io::Error> 
         }
     }
 }
+
+// ===========================================================================
+// Reasonix 归档（扁平 sidecar 模型，与 Claude 的 8 处关联数据完全不同）
+// ===========================================================================
+// 布局：<archive_root>/reasonix/<sid>/  存该会话的全部 sidecar（扁平，不分子目录）。
+// reasonix 的会话 = <name>.jsonl + <name>.meta.json + <name>.events.jsonl 等，
+// 归档时整体移进 capsule，恢复时整体移回原 sessions 目录。
+
+/// Reasonix 归档区根：<archive_root>/reasonix/
+fn reasonix_archive_root(archive_root: &Path) -> PathBuf {
+    archive_root.join("reasonix")
+}
+
+/// 单个 reasonix 会话的 capsule 目录。
+fn reasonix_capsule(archive_root: &Path, sid: &str) -> PathBuf {
+    reasonix_archive_root(archive_root).join(sid)
+}
+
+/// Reasonix 会话的 meta.json 路径（无论在 sessions 还是归档区，都按 stem 找）。
+fn reasonix_meta_of(dir: &Path, stem: &str) -> PathBuf {
+    dir.join(format!("{stem}.meta.json"))
+}
+
+/// 归档一个 reasonix 会话：把 <sid>.jsonl + 全部 sidecar 移进 capsule。
+/// 返回 Ok(()) 全部成功；Err 含失败项。
+pub fn archive_reasonix_session(sid: &str, archive_root: &Path) -> Result<(), String> {
+    let paths = crate::tools::reasonix::session_data_paths(sid);
+    if paths.is_empty() {
+        return Err(format!("找不到会话文件: {sid}"));
+    }
+    let capsule = reasonix_capsule(archive_root, sid);
+    let _ = fs::create_dir_all(&capsule);
+
+    let mut errors: Vec<String> = Vec::new();
+    for src in &paths {
+        // 文件名保留原样（含 .meta.json / .events.jsonl 等）。
+        let fname = src.file_name().unwrap_or_default();
+        let dest = capsule.join(fname);
+        if let Err(e) = move_path(src, &dest) {
+            errors.push(format!("{}: {e}", src.display()));
+        }
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("; "))
+    }
+}
+
+/// 恢复一个归档的 reasonix 会话：把 capsule 里的文件移回 sessions 目录。
+pub fn restore_reasonix_session(sid: &str, archive_root: &Path) -> Result<(), String> {
+    let capsule = reasonix_capsule(archive_root, sid);
+    if !capsule.is_dir() {
+        return Err(format!("归档中找不到会话: {sid}"));
+    }
+    let sessions_dir = crate::paths::reasonix_dir().join("sessions");
+    let _ = fs::create_dir_all(&sessions_dir);
+
+    let mut errors: Vec<String> = Vec::new();
+    if let Ok(entries) = fs::read_dir(&capsule) {
+        for entry in entries.flatten() {
+            let src = entry.path();
+            let fname = src.file_name().unwrap_or_default();
+            let dest = sessions_dir.join(fname);
+            if let Err(e) = move_path(&src, &dest) {
+                errors.push(format!("{}: {e}", src.display()));
+            }
+        }
+    }
+    // capsule 已空则删掉，保持归档区整洁。
+    let _ = fs::remove_dir_all(&capsule);
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("; "))
+    }
+}
+
+/// 物理删除归档的 reasonix 会话：整个 capsule 删掉。
+pub fn purge_archived_reasonix(sid: &str, archive_root: &Path) -> bool {
+    let capsule = reasonix_capsule(archive_root, sid);
+    if capsule.is_dir() {
+        fs::remove_dir_all(&capsule).is_ok()
+    } else {
+        true
+    }
+}
+
+/// 列出归档区的所有 reasonix 会话（解析成 Conversation，供归档页展示）。
+pub fn list_archived_reasonix(archive_root: &Path) -> Vec<Conversation> {
+    let root = reasonix_archive_root(archive_root);
+    let mut convos: Vec<Conversation> = Vec::new();
+    let Ok(entries) = fs::read_dir(&root) else {
+        return convos;
+    };
+    for entry in entries.flatten() {
+        let capsule = entry.path();
+        if !capsule.is_dir() {
+            continue;
+        }
+        let sid = capsule.file_name().unwrap_or_default().to_string_lossy().to_string();
+        // capsule 里找 <sid>.jsonl 作为正文。
+        let jsonl = capsule.join(format!("{sid}.jsonl"));
+        if !jsonl.exists() {
+            continue;
+        }
+        let meta_path = reasonix_meta_of(&capsule, &sid);
+        let meta_text = fs::read_to_string(&meta_path).ok();
+        let meta: serde_json::Value = meta_text
+            .as_deref()
+            .and_then(|s| serde_json::from_str(s).ok())
+            .unwrap_or(serde_json::Value::Null);
+        let cwd = meta.get("workspace").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let model = meta.get("model").and_then(|v| v.as_str()).unwrap_or("未知").to_string();
+
+        let metadata = fs::metadata(&jsonl).ok();
+        let size_bytes = metadata.as_ref().map(|m| m.len()).unwrap_or(0);
+        let last_updated = metadata
+            .as_ref()
+            .and_then(|m| m.modified().ok())
+            .map(|t| t.duration_since(SystemTime::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0))
+            .unwrap_or(0);
+
+        // 标题：从 jsonl 取首条 user 文本，否则用 sid。
+        let title = first_user_text(&jsonl)
+            .map(|t| truncate(&t, 60))
+            .unwrap_or_else(|| format!("会话 {}", &sid[..sid.len().min(20)]));
+        let preview = first_user_text(&jsonl)
+            .map(|t| truncate(&t, 120))
+            .unwrap_or_default();
+
+        let message_count = count_lines(&jsonl);
+
+        convos.push(Conversation {
+            id: sid.clone(),
+            title,
+            project_encoded: cwd.clone(),
+            model,
+            message_count,
+            size_bytes,
+            first_user_preview: preview,
+            last_updated,
+            is_archived: true,
+            cwd,
+        });
+    }
+    convos.sort_by(|a, b| b.last_updated.cmp(&a.last_updated));
+    convos
+}
+
+fn first_user_text(jsonl: &Path) -> Option<String> {
+    let content = fs::read_to_string(jsonl).ok()?;
+    for line in content.lines() {
+        let v: serde_json::Value = match serde_json::from_str(line) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        if v.get("role").and_then(|r| r.as_str()) != Some("user") {
+            continue;
+        }
+        if let Some(s) = v.get("content").and_then(|c| c.as_str()) {
+            let t = s.trim();
+            if !t.is_empty() && !t.starts_with('<') {
+                return Some(s.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn truncate(s: &str, max_chars: usize) -> String {
+    let first_line = s.split(|c| c == '\r' || c == '\n').find(|l| !l.trim().is_empty()).unwrap_or("");
+    let stripped = first_line.trim_start_matches('#').trim();
+    let chars: Vec<char> = stripped.chars().collect();
+    if chars.len() > max_chars {
+        format!("{}...", chars[..max_chars].iter().collect::<String>())
+    } else {
+        stripped.to_string()
+    }
+}
+
+fn count_lines(path: &Path) -> u32 {
+    fs::read_to_string(path)
+        .map(|s| s.lines().filter(|l| !l.trim().is_empty()).count() as u32)
+        .unwrap_or(0)
+}

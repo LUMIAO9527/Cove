@@ -3,13 +3,14 @@ import "./styles/animations.css";
 import { icon } from "./styles/icons";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { renderProjectsView, renderHeader } from "./views/projects";
+import { renderProjectsView, renderHeader, escapeHtml } from "./views/projects";
 import { renderConversationsView } from "./views/conversations";
 import { renderLooseView } from "./views/loose";
 import { renderArchiveView } from "./views/archive";
 import { renderCleanupView } from "./views/cleanup";
 import { renderSessionDetailView } from "./views/session-detail";
-import { Project } from "./api";
+import { toast } from "./views/confirm";
+import { Project, ToolName, DEFAULT_TOOL, api } from "./api";
 
 const app = document.getElementById("app")!;
 
@@ -18,6 +19,11 @@ const app = document.getElementById("app")!;
 // cove-shown 事件触发时（用户每次重新打开 Cove 弹窗）会调用它一次，
 // 保证"每次打开看到的就是最新的"，不需要用户手动刷新。
 let currentView: (() => void) | null = null;
+
+// 当前选中的 CLI 工具。顶部 titlebar 切换器修改它，切到哪个工具，
+// 项目/散落对话/归档/清理四页就只显示该工具的数据。Claude 专属的归档/
+// 清理页在非 Claude 工具下降级为说明页。
+let currentTool: ToolName = DEFAULT_TOOL;
 
 // ----- Flyout open/close animation (driven by Rust events) -----
 // Rust emits "cove-shown" right after the window is shown → play open anim.
@@ -76,6 +82,7 @@ titlebar.className = "titlebar";
 titlebar.innerHTML = `
     <img class="titlebar-brand" src="${COVE_ICON}" alt="Cove" draggable="false">
     <span class="titlebar-title" id="titlebar-title">Cove</span>
+    <span class="tool-capsule" id="tool-capsule"></span>
     <span class="titlebar-model" id="titlebar-model"></span>
 `;
 
@@ -97,6 +104,86 @@ app.appendChild(titlebar);
 app.appendChild(content);
 app.appendChild(footer);
 
+// ----- Tool switcher (titlebar): dual-icon capsule -----
+// 一个外胶囊里包两个小胶囊(Claude 图标 / Reasonix 图标)，点哪个亮哪个。
+// 未安装的工具灰掉不可点；当前选中的高亮。高度与右侧模型胶囊对齐。
+// 安装状态在启动时查后端 get_installed_tools（probe CLI 是否在 PATH）。
+const TOOL_LABELS: Record<ToolName, string> = {
+    claude: "Claude Code",
+    reasonix: "Reasonix",
+};
+let installedTools: Record<string, boolean> = { claude: true, reasonix: false };
+
+/** 当前选中的工具（尊重用户选择，即使未安装——view 层负责提示未安装）。 */
+function effectiveTool(): ToolName {
+    return currentTool;
+}
+
+/** 当前工具是否已安装（view 据此决定显示数据还是"未安装"提示）。 */
+function toolInstalled(): boolean {
+    return !!installedTools[currentTool];
+}
+
+/** 渲染双胶囊。任何工具都可点选高亮（即使未安装——用户可切过去看，
+ *  功能区会提示"未安装"）。当前选中的 active 高亮。 */
+function renderToolCapsule(): void {
+    const el = document.getElementById("tool-capsule");
+    if (!el) return;
+    const tools: ToolName[] = ["claude", "reasonix"];
+    el.innerHTML = tools
+        .map((t) => {
+            const installed = installedTools[t];
+            const active = currentTool === t;
+            const cls = ["tool-pill", active ? "is-active" : "", installed ? "" : "not-installed"]
+                .filter(Boolean)
+                .join(" ");
+            const title = installed
+                ? TOOL_LABELS[t]
+                : `${TOOL_LABELS[t]}（未安装）`;
+            const glyph = t === "claude" ? claudeGlyph() : reasonixGlyph();
+            return `<button class="${cls}" data-tool="${t}" title="${title}">${glyph}</button>`;
+        })
+        .join("");
+    el.querySelectorAll<HTMLElement>(".tool-pill").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const t = btn.dataset.tool as ToolName;
+            if (t === currentTool) return;
+            currentTool = t;
+            renderToolCapsule();
+            currentView ? currentView() : showProjects();
+        });
+    });
+}
+
+/** Claude Code 官方图标（simple-icons "claude"，星芒造型）。
+ *  品牌色 Claude orange #cc785c；未选中时用 currentColor 跟随文字色。 */
+function claudeGlyph(): string {
+    return `<svg class="tool-glyph tool-glyph-claude" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+        <path d="m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z"/>
+    </svg>`;
+}
+
+/** Reasonix 官方品牌 mark（docs/logo.svg 的同心菱形，静态无动画版）。
+ *  品牌渐变 cyan→blue→violet；未选中时用 currentColor 跟随文字色。 */
+function reasonixGlyph(): string {
+    return `<svg class="tool-glyph tool-glyph-reasonix" viewBox="0 0 92 92" width="14" height="14" aria-hidden="true">
+        <path class="rx-diamond-outer" d="M 46 6 L 86 46 L 46 86 L 6 46 Z" fill="none" stroke-width="6" stroke-linejoin="round"/>
+        <path class="rx-diamond-inner" d="M 46 24 L 68 46 L 46 68 L 24 46 Z" fill="none" stroke-width="4" stroke-linejoin="round"/>
+    </svg>`;
+}
+
+async function loadInstalledTools(): Promise<void> {
+    try {
+        installedTools = await api.getInstalledTools();
+    } catch {
+        installedTools = { claude: true, reasonix: false };
+    }
+    // 不强制回退：用户可以切到未安装的工具（功能区会提示"未安装"）。
+    // 只在 currentTool 完全无效时兜底。
+    renderToolCapsule();
+}
+
 // Navigation highlight
 function setActiveNav(id: string): void {
     footer.querySelectorAll<HTMLElement>(".btn").forEach((b) => b.classList.remove("is-active"));
@@ -107,19 +194,23 @@ function setActiveNav(id: string): void {
 async function showProjects(): Promise<void> {
     setActiveNav("nav-projects");
     currentView = () => { void showProjects(); };
-    await renderHeader(document.getElementById("titlebar-model")!);
+    renderToolCapsule();
+    const tool = effectiveTool();
+    await renderHeader(document.getElementById("titlebar-model")!, tool);
+    if (!toolInstalled()) { renderNotInstalledPage(content, tool); return; }
     await renderProjectsView(
         content,
+        tool,
         async (proj: Project) => {
             // 项目详情会话列表入口：返回时回到该项目详情页，定位到该会话。
             // 具名回调避免 onBack 里重新渲染时的递归类型问题。
             const enterConvo = (sid: string, encoded: string, projPath: string, title: string) => {
                 showSessionDetail(sid, encoded, projPath, title, async () => {
-                    await renderConversationsView(content, proj, () => showProjects(), enterConvo);
+                    await renderConversationsView(content, tool, proj, () => showProjects(), enterConvo);
                     scrollToSession(sid);
                 });
             };
-            await renderConversationsView(content, proj, () => showProjects(), enterConvo);
+            await renderConversationsView(content, tool, proj, () => showProjects(), enterConvo);
         },
         // 项目卡片内联展开入口：返回时回到项目列表，并恢复该项目的展开态，
         // 精确定位到刚才那条会话（main.ts 里做定位，因为 showProjects 是全量重渲染）。
@@ -147,6 +238,7 @@ function showSessionDetail(
 ): void {
     void renderSessionDetailView(
         content,
+        effectiveTool(),
         sid,
         projEncoded,
         projPath,
@@ -159,32 +251,108 @@ function showSessionDetail(
 function showConversations(): void {
     setActiveNav("nav-conversations");
     currentView = () => { showConversations(); };
-    void renderHeader(document.getElementById("titlebar-model")!);
+    renderToolCapsule();
+    const tool = effectiveTool();
+    void renderHeader(document.getElementById("titlebar-model")!, tool);
+    if (!toolInstalled()) { renderNotInstalledPage(content, tool); return; }
     // 散落对话入口：返回时回到散落对话页，并定位到刚才那条会话。
     // 用具名函数避免 onBack 里重新渲染时的递归类型问题。
     const enterSession = (sid: string, encoded: string, projPath: string, title: string) => {
         showSessionDetail(sid, encoded, projPath, title, async () => {
-            await renderLooseView(content, enterSession);
+            await renderLooseView(content, tool, enterSession);
             scrollToSession(sid);
         });
     };
-    renderLooseView(content, enterSession);
+    renderLooseView(content, tool, enterSession);
 }
 
-// View: archive
+// View: archive (per-tool: Claude 8-关联数据 / Reasonix sidecar 归档)
 function showArchive(): void {
     setActiveNav("nav-archive");
     currentView = () => { showArchive(); };
-    void renderHeader(document.getElementById("titlebar-model")!);
-    renderArchiveView(content);
+    renderToolCapsule();
+    const tool = effectiveTool();
+    void renderHeader(document.getElementById("titlebar-model")!, tool);
+    if (!toolInstalled()) { renderNotInstalledPage(content, tool); return; }
+    renderArchiveView(content, tool);
 }
 
-// View: cleanup
+// View: cleanup (Claude-only; 磁盘清理依赖 Claude 的 ~/.claude 关联数据结构，
+// reasonix 没有等价的孤儿数据概念——这是真实数据模型差异，不是功能缺失)
 function showCleanup(): void {
     setActiveNav("nav-cleanup");
     currentView = () => { showCleanup(); };
-    void renderHeader(document.getElementById("titlebar-model")!);
-    renderCleanupView(content);
+    renderToolCapsule();
+    const tool = effectiveTool();
+    void renderHeader(document.getElementById("titlebar-model")!, tool);
+    if (!toolInstalled()) { renderNotInstalledPage(content, tool); return; }
+    if (tool === "claude") {
+        renderCleanupView(content);
+    } else {
+        renderFeatureUnsupportedPage(content, "磁盘清理", tool);
+    }
+}
+
+/** 工具未安装时的统一提示页。切换到未装工具的任一功能区都显示这个，
+ *  告诉用户怎么装。工具本身可选中（胶囊高亮），只是没有数据可管。
+ *
+ *  安装命令做成两按钮：主按钮是命令行（点击复制到剪贴板），旁边一个小按钮
+ *  打开空白终端（定位到主目录）。用户复制命令 → 点开终端 → 粘贴回车即装。
+ *  两个按钮完全解耦：不预填不自动执行，让用户在按回车前看清命令。 */
+function renderNotInstalledPage(container: HTMLElement, tool: ToolName): void {
+    const installCmd = tool === "claude"
+        ? "npm i -g @anthropic-ai/claude-code"
+        : "npm i -g reasonix";
+    container.innerHTML = `
+        <div class="empty-state">
+            <div class="empty-icon">${icon("info", 28)}</div>
+            <div class="empty-title">${TOOL_LABELS[tool]} 未安装</div>
+            <div class="empty-hint">安装后即可在 Cove 中管理它的项目与会话。</div>
+            <div class="install-row">
+                <button class="install-cmd" title="点击复制安装命令">
+                    <span class="install-cmd-text mono">${escapeHtml(installCmd)}</span>
+                    ${icon("copy", 13)}
+                </button>
+                <button class="install-open" id="install-open-terminal" title="打开终端">
+                    ${icon("terminal", 14)}
+                </button>
+            </div>
+        </div>
+    `;
+    // 主按钮：点击复制安装命令到剪贴板（复用 projects.ts 的 bindCopyable 机制，
+    // 但这里内联实现避免跨模块依赖；复制后 toast 提示）。
+    const cmdBtn = container.querySelector<HTMLElement>(".install-cmd");
+    cmdBtn?.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        try {
+            await navigator.clipboard.writeText(installCmd);
+            toast("已复制安装命令");
+        } catch {
+            toast("复制失败，请手动选择命令");
+        }
+    });
+    // 小按钮：打开空白终端（定位主目录），用户粘贴刚复制的命令回车执行。
+    container.querySelector<HTMLElement>("#install-open-terminal")
+        ?.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            try {
+                await api.openInstallTerminal();
+            } catch (err) {
+                toast("打开终端失败：" + String(err));
+            }
+        });
+}
+
+/** 工具已安装，但该功能依赖另一种工具的数据结构（如磁盘清理依赖 Claude 的
+ *  ~/.claude 关联数据，reasonix 没有等价概念）。这是真实数据模型差异。 */
+function renderFeatureUnsupportedPage(container: HTMLElement, featureName: string, tool: ToolName): void {
+    container.innerHTML = `
+        <div class="empty-state">
+            <div class="empty-icon">${icon("info", 28)}</div>
+            <div class="empty-title">${featureName}仅支持 Claude Code</div>
+            <div class="empty-hint">${featureName}依赖 Claude Code 的数据目录结构。${TOOL_LABELS[tool]} 的项目、会话、归档均已支持。</div>
+        </div>
+    `;
 }
 
 document.getElementById("nav-projects")!.addEventListener("click", showProjects);
@@ -228,4 +396,4 @@ async function restoreInlineExpansion(projectPath: string, sid: string): Promise
     scrollToSession(sid);
 }
 
-showProjects();
+void loadInstalledTools().then(() => showProjects());

@@ -1,4 +1,5 @@
 use crate::paths::claude_dir;
+use crate::tools::ToolKind;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -18,19 +19,51 @@ pub struct ProjectsConfig {
     pub projects: Vec<ProjectEntry>,
 }
 
-/// Path of the config file: `~/.claude/cove-projects.json`.
-pub fn config_path() -> PathBuf {
+/// Filename for each tool's project list. All live under ~/.claude/ so they
+/// share one home with Cove's own settings (cove-settings.json etc.). The
+/// legacy `cove-projects.json` (pre-multi-tool) is migrated into the Claude
+/// file on first load — see `load`.
+fn config_filename(tool: ToolKind) -> &'static str {
+    match tool {
+        ToolKind::Claude => "cove-projects-claude.json",
+        ToolKind::Reasonix => "cove-projects-reasonix.json",
+    }
+}
+
+/// Path of the config file for `tool`: `~/.claude/cove-projects-<tool>.json`.
+pub fn config_path_for(tool: ToolKind) -> PathBuf {
+    claude_dir().join(config_filename(tool))
+}
+
+/// Legacy pre-multi-tool config path. Kept for the one-time migration in `load`.
+fn legacy_config_path() -> PathBuf {
     claude_dir().join("cove-projects.json")
 }
 
-/// Load the config. Returns an empty config if the file is missing or unreadable.
+/// Load the config for `tool`. Returns an empty config if the file is missing.
 ///
-/// As a one-time migration, strips the Windows `\\?\` verbatim prefix from any
-/// stored path (older versions stored canonicalize() output verbatim, which
-/// broke encode_project_path matching). If anything changed, the cleaned
-/// config is persisted back.
-pub fn load() -> ProjectsConfig {
-    let path = config_path();
+/// One-time migration: when loading Claude's config and the tool-specific file
+/// doesn't exist yet but the legacy `cove-projects.json` does, the legacy file
+/// is adopted as Claude's config (renamed on disk) so existing users keep their
+/// projects. The migration is idempotent: after the first run the tool-specific
+/// file exists, so the legacy path is never touched again.
+///
+/// Also strips the Windows `\\?\` verbatim prefix from any stored path (older
+/// versions stored canonicalize() output verbatim, which broke
+/// encode_project_path matching). If anything changed, persists the cleaned
+/// config back.
+pub fn load(tool: ToolKind) -> ProjectsConfig {
+    let path = config_path_for(tool);
+
+    // Legacy migration: Claude-only, first run after upgrade.
+    if tool == ToolKind::Claude && !path.exists() {
+        let legacy = legacy_config_path();
+        if legacy.exists() {
+            // Adopt the legacy file in place by renaming it to the new name.
+            let _ = fs::rename(&legacy, &path);
+        }
+    }
+
     let mut cfg = match fs::read_to_string(&path) {
         Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
         Err(_) => ProjectsConfig::default(),
@@ -46,16 +79,16 @@ pub fn load() -> ProjectsConfig {
         }
     }
     if changed {
-        let _ = save(&cfg);
+        let _ = save(tool, &cfg);
     }
     cfg
 }
 
-/// Persist the config (creates the parent dir if needed).
-/// 原子写：写 .tmp 再 rename，避免写入中途崩溃导致 cove-projects.json 截断
+/// Persist the config for `tool` (creates the parent dir if needed).
+/// 原子写：写 .tmp 再 rename，避免写入中途崩溃导致配置文件截断
 /// （截断会被 load() 的 unwrap_or_default() 静默清空 → 用户丢全部项目）。
-pub fn save(cfg: &ProjectsConfig) -> Result<(), String> {
-    let path = config_path();
+pub fn save(tool: ToolKind, cfg: &ProjectsConfig) -> Result<(), String> {
+    let path = config_path_for(tool);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
@@ -63,15 +96,15 @@ pub fn save(cfg: &ProjectsConfig) -> Result<(), String> {
     crate::archive::atomic_write(&path, json).map_err(|e| e.to_string())
 }
 
-/// Returns true if `path` is already registered.
-pub fn exists(real_path: &str) -> bool {
-    let cfg = load();
+/// Returns true if `path` is already registered under `tool`.
+pub fn exists(tool: ToolKind, real_path: &str) -> bool {
+    let cfg = load(tool);
     cfg.projects.iter().any(|p| same_path(&p.path, real_path))
 }
 
-/// Add a project. Validates the directory exists and not already registered.
-/// Returns the added entry, or an error message.
-pub fn add(real_path: &str, name: Option<String>) -> Result<ProjectEntry, String> {
+/// Add a project under `tool`. Validates the directory exists and not already
+/// registered. Returns the added entry, or an error message.
+pub fn add(tool: ToolKind, real_path: &str, name: Option<String>) -> Result<ProjectEntry, String> {
     let p = PathBuf::from(real_path);
     if !p.is_dir() {
         return Err(format!("目录不存在: {}", real_path));
@@ -87,7 +120,7 @@ pub fn add(real_path: &str, name: Option<String>) -> Result<ProjectEntry, String
     // tab instead of showing under their project.
     let canon = crate::paths::strip_verbatim_prefix_pub(&canon).to_string();
 
-    if exists(&canon) {
+    if exists(tool, &canon) {
         return Err("该项目已添加".to_string());
     }
 
@@ -97,30 +130,30 @@ pub fn add(real_path: &str, name: Option<String>) -> Result<ProjectEntry, String
         added_at: now_millis(),
     };
 
-    let mut cfg = load();
+    let mut cfg = load(tool);
     cfg.projects.insert(0, entry.clone()); // newest first
-    save(&cfg)?;
+    save(tool, &cfg)?;
     Ok(entry)
 }
 
-/// Remove a project by its real path. Does NOT touch disk data.
+/// Remove a project by its real path under `tool`. Does NOT touch disk data.
 /// Returns true if removed.
-pub fn remove(real_path: &str) -> bool {
-    let mut cfg = load();
+pub fn remove(tool: ToolKind, real_path: &str) -> bool {
+    let mut cfg = load(tool);
     let before = cfg.projects.len();
     cfg.projects.retain(|p| !same_path(&p.path, real_path));
     let changed = cfg.projects.len() != before;
     if changed {
-        let _ = save(&cfg);
+        let _ = save(tool, &cfg);
     }
     changed
 }
 
-/// Rename a project's alias by its real path. An empty/whitespace name clears
-/// the alias so it falls back to the directory name. `added_at` is preserved.
-/// Returns the updated entry, or an error if the project is not found.
-pub fn rename(real_path: &str, name: Option<String>) -> Result<ProjectEntry, String> {
-    let mut cfg = load();
+/// Rename a project's alias by its real path under `tool`. An empty/whitespace
+/// name clears the alias so it falls back to the directory name. `added_at` is
+/// preserved. Returns the updated entry, or an error if the project is not found.
+pub fn rename(tool: ToolKind, real_path: &str, name: Option<String>) -> Result<ProjectEntry, String> {
+    let mut cfg = load(tool);
     let entry = cfg
         .projects
         .iter_mut()
@@ -128,7 +161,7 @@ pub fn rename(real_path: &str, name: Option<String>) -> Result<ProjectEntry, Str
         .ok_or_else(|| format!("项目未找到: {}", real_path))?;
     entry.name = name.filter(|s| !s.trim().is_empty());
     let updated = entry.clone();
-    save(&cfg)?;
+    save(tool, &cfg)?;
     Ok(updated)
 }
 
@@ -149,4 +182,15 @@ pub fn now_millis() -> i64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_config_filename_per_tool() {
+        assert_eq!(config_filename(ToolKind::Claude), "cove-projects-claude.json");
+        assert_eq!(config_filename(ToolKind::Reasonix), "cove-projects-reasonix.json");
+    }
 }

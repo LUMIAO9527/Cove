@@ -1,4 +1,4 @@
-import { api, ContentBlock, SessionTranscript, TranscriptTurn } from "../api";
+import { api, ContentBlock, SessionTranscript, TranscriptTurn, ToolName } from "../api";
 import { icon } from "../styles/icons";
 import { toast } from "./confirm";
 import { escapeHtml } from "./projects";
@@ -7,10 +7,11 @@ import { escapeHtml } from "./projects";
  * Session history viewer: read-only transcript of one conversation.
  * Renders the full user/assistant turn sequence, with thinking and tool
  * calls rendered as collapsible sections. Read-only — continuing the
- * conversation still goes through the terminal (`openClaudeSession`).
+ * conversation still goes through the terminal (`openSession`).
  */
 export async function renderSessionDetailView(
     container: HTMLElement,
+    tool: ToolName,
     sid: string,
     projectEncoded: string,
     projectPath: string,
@@ -37,7 +38,7 @@ export async function renderSessionDetailView(
 
     let transcript: SessionTranscript;
     try {
-        transcript = await api.getTranscript(sid, projectEncoded);
+        transcript = await api.getTranscript(tool, sid, projectEncoded);
     } catch (err) {
         container.querySelector(".transcript-loading")!.innerHTML =
             `<div class="empty-state">
@@ -51,7 +52,7 @@ export async function renderSessionDetailView(
     // Bind resume after we have the title (uses projectPath + sid).
     document.getElementById("resume-btn")?.addEventListener("click", async () => {
         try {
-            await api.openClaudeSession(projectPath, sid);
+            await api.openSession(tool, projectPath, sid);
         } catch (err) {
             toast("启动失败：" + String(err));
         }
@@ -94,7 +95,7 @@ export async function renderSessionDetailView(
     document.getElementById("back-btn2")?.addEventListener("click", onBack);
     document.getElementById("resume-btn2")?.addEventListener("click", async () => {
         try {
-            await api.openClaudeSession(projectPath, sid);
+            await api.openSession(tool, projectPath, sid);
         } catch (err) {
             toast("启动失败：" + String(err));
         }

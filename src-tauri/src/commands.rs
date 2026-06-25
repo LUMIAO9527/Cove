@@ -6,46 +6,49 @@ use crate::cleanup::{delete_conversation, scan_orphans, DeleteResult, list_relat
 use crate::models::{Conversation, ModelInfo, OrphanEntry, Project, RelatedItem, SessionTranscript};
 use crate::paths::{archive_dir, claude_dir, encode_project_path};
 use crate::projects_config::{self, ProjectEntry};
-use crate::scan::conversations_for_path;
 use crate::settings::{read_model_info, read_raw_model, is_tier_alias, set_default_tier, default_workspace, set_default_workspace};
-use crate::transcript;
+use crate::tools::ToolKind;
 use tauri::Manager;
 
 // ---------------------------------------------------------------------------
 // Projects (user-managed list)
 // ---------------------------------------------------------------------------
 
-/// List all registered projects, each enriched with live conversation stats.
+/// List all registered projects for `tool`, each enriched with live conversation stats.
 #[tauri::command]
-pub fn get_projects() -> Vec<Project> {
-    let cfg = projects_config::load();
+pub fn get_projects(tool: String) -> Vec<Project> {
+    let tool = ToolKind::from_name(&tool);
+    let cfg = projects_config::load(tool);
     let mut out: Vec<Project> = cfg
         .projects
         .iter()
-        .map(|e| entry_to_project(e))
+        .map(|e| entry_to_project(tool, e))
         .collect();
     // most recently added first (config already keeps newest first, but sort defensively)
     out.sort_by(|a, b| b.added_at.cmp(&a.added_at));
     out
 }
 
-/// Register a new project by its real working directory.
+/// Register a new project by its real working directory, under `tool`.
 #[tauri::command]
-pub fn add_project(path: String, name: Option<String>) -> Result<Project, String> {
-    let entry = projects_config::add(&path, name)?;
-    Ok(entry_to_project(&entry))
+pub fn add_project(tool: String, path: String, name: Option<String>) -> Result<Project, String> {
+    let tool = ToolKind::from_name(&tool);
+    let entry = projects_config::add(tool, &path, name)?;
+    Ok(entry_to_project(tool, &entry))
 }
 
 /// Remove a project from the list (keeps all disk data).
 #[tauri::command]
-pub fn remove_project(path: String) -> bool {
-    projects_config::remove(&path)
+pub fn remove_project(tool: String, path: String) -> bool {
+    let tool = ToolKind::from_name(&tool);
+    projects_config::remove(tool, &path)
 }
 
 /// Rename a project's alias (the display name). An empty/whitespace name
 /// resets it to the directory name. `added_at` is preserved.
 #[tauri::command]
-pub fn rename_project(path: String, name: String) -> Result<Project, String> {
+pub fn rename_project(tool: String, path: String, name: String) -> Result<Project, String> {
+    let tool = ToolKind::from_name(&tool);
     let trimmed = name.trim();
     if trimmed.is_empty() {
         return Err("名称不能为空".to_string());
@@ -53,39 +56,45 @@ pub fn rename_project(path: String, name: String) -> Result<Project, String> {
     if trimmed.chars().count() > 80 {
         return Err("名称过长（上限 80 字符）".to_string());
     }
-    let entry = projects_config::rename(&path, Some(trimmed.to_string()))?;
-    Ok(entry_to_project(&entry))
+    let entry = projects_config::rename(tool, &path, Some(trimmed.to_string()))?;
+    Ok(entry_to_project(tool, &entry))
 }
 
-/// Detail view: conversations for a single project (precise, encode-based).
+/// Detail view: conversations for a single project (precise, encode-based for
+/// Claude; cwd-based for Reasonix).
 #[tauri::command]
-pub fn get_project_detail(path: String) -> Vec<Conversation> {
-    conversations_for_path(&path)
+pub fn get_project_detail(tool: String, path: String) -> Vec<Conversation> {
+    let tool = ToolKind::from_name(&tool);
+    tool.conversations_for_path(&path)
 }
 
-/// Loose conversations: ALL sessions minus those belonging to registered projects.
-/// Used by the "对话" tab (scattered conversations like Codex).
+/// Loose conversations: ALL sessions for `tool` minus those belonging to
+/// registered projects. Used by the "对话" tab (scattered conversations).
 #[tauri::command]
-pub fn get_loose_conversations() -> Vec<Conversation> {
-    use std::collections::HashSet;
-    let root = claude_dir();
-    let mut all = crate::scan::scan_all_conversations(&root);
-    // collect encoded names of registered projects
-    let registered: HashSet<String> = projects_config::load()
+pub fn get_loose_conversations(tool: String) -> Vec<Conversation> {
+    let tool = ToolKind::from_name(&tool);
+    // Registered project cwds for this tool — used to filter them out.
+    let registered: Vec<String> = projects_config::load(tool)
         .projects
         .iter()
-        .map(|e| encode_project_path(&e.path))
+        .map(|e| e.path.clone())
         .collect();
-    all.retain(|c| !registered.contains(&c.project_encoded));
-    all
+    tool.scan_loose(&registered)
 }
 
-/// Build a Project (with live stats) from a config entry.
-fn entry_to_project(e: &ProjectEntry) -> Project {
-    let encoded = encode_project_path(&e.path);
-    let convos = conversations_for_path(&e.path);
+/// Build a Project (with live stats) from a config entry, using `tool` to pick
+/// the right scan adapter.
+fn entry_to_project(tool: ToolKind, e: &ProjectEntry) -> Project {
+    let convos = tool.conversations_for_path(&e.path);
     let total_size: u64 = convos.iter().map(|c| c.size_bytes).sum();
     let last_updated = convos.iter().map(|c| c.last_updated).max().unwrap_or(0);
+
+    // For Claude the encoded dir is a real concept (Claude Code's project dir
+    // name); for other tools there is no such encoding, so leave it empty.
+    let encoded = match tool {
+        ToolKind::Claude => encode_project_path(&e.path),
+        ToolKind::Reasonix => String::new(),
+    };
 
     Project {
         encoded_name: encoded.clone(),
@@ -121,20 +130,54 @@ pub fn get_model_info() -> ModelInfo {
 }
 
 #[tauri::command]
-pub fn delete_convo(sid: String, project_encoded: String) -> DeleteResult {
-    delete_conversation(&sid, &project_encoded, &claude_dir())
+pub fn delete_convo(tool: String, sid: String, project_encoded: String) -> DeleteResult {
+    let tool = ToolKind::from_name(&tool);
+    match tool {
+        ToolKind::Claude => delete_conversation(&sid, &project_encoded, &claude_dir()),
+        ToolKind::Reasonix => {
+            // Reasonix: a session is a flat <name>.jsonl + sidecars. Delete them all.
+            let paths = crate::tools::reasonix::session_data_paths(&sid);
+            let mut removed = Vec::new();
+            let mut freed: u64 = 0;
+            let mut success = true;
+            for p in &paths {
+                let size = std::fs::metadata(p).map(|m| m.len()).unwrap_or(0);
+                let r = if p.is_dir() {
+                    std::fs::remove_dir_all(p)
+                } else {
+                    std::fs::remove_file(p)
+                };
+                if r.is_ok() {
+                    removed.push(p.to_string_lossy().to_string());
+                    freed += size;
+                } else {
+                    success = false;
+                }
+            }
+            DeleteResult { success, freed_bytes: freed, removed_paths: removed }
+        }
+    }
 }
 
-/// 归档一个会话。返回 Ok(()) 全部关联数据归档成功；Err 含失败项描述（前端 toast）。
+/// 归档一个会话。Claude 走 8 处关联数据归档；Reasonix 走扁平 sidecar 归档。
+/// 返回 Ok(()) 全部关联数据归档成功；Err 含失败项描述（前端 toast）。
 #[tauri::command]
-pub fn archive_convo(sid: String, project_encoded: String) -> Result<(), String> {
-    do_archive(&sid, &project_encoded, &claude_dir(), &archive_dir())
+pub fn archive_convo(tool: String, sid: String, project_encoded: String) -> Result<(), String> {
+    let tool = ToolKind::from_name(&tool);
+    match tool {
+        ToolKind::Claude => do_archive(&sid, &project_encoded, &claude_dir(), &archive_dir()),
+        ToolKind::Reasonix => crate::archive::archive_reasonix_session(&sid, &archive_dir()),
+    }
 }
 
 /// 恢复一个归档会话。返回 Ok(()) 全部数据还原成功；Err 含失败项。
 #[tauri::command]
-pub fn restore_convo(sid: String, project_encoded: String) -> Result<(), String> {
-    do_restore(&sid, &project_encoded, &claude_dir(), &archive_dir())
+pub fn restore_convo(tool: String, sid: String, project_encoded: String) -> Result<(), String> {
+    let tool = ToolKind::from_name(&tool);
+    match tool {
+        ToolKind::Claude => do_restore(&sid, &project_encoded, &claude_dir(), &archive_dir()),
+        ToolKind::Reasonix => crate::archive::restore_reasonix_session(&sid, &archive_dir()),
+    }
 }
 
 #[tauri::command]
@@ -143,15 +186,23 @@ pub fn get_archive_index() -> ArchiveIndex {
 }
 
 /// 归档区所有会话，解析成完整 Conversation（真实标题/模型/消息数/大小/cwd），
-/// 供归档页用和会话列表同一套卡片 + 信息浮层展示。
+/// 供归档页用和会话列表同一套卡片 + 信息浮层展示。按工具取各自的归档区。
 #[tauri::command]
-pub fn get_archive_conversations() -> Vec<Conversation> {
-    list_archived_conversations(&archive_dir())
+pub fn get_archive_conversations(tool: String) -> Vec<Conversation> {
+    let tool = ToolKind::from_name(&tool);
+    match tool {
+        ToolKind::Claude => list_archived_conversations(&archive_dir()),
+        ToolKind::Reasonix => crate::archive::list_archived_reasonix(&archive_dir()),
+    }
 }
 
 #[tauri::command]
-pub fn purge_archived_convo(sid: String, project_encoded: String) -> bool {
-    purge_archived(&sid, &project_encoded, &archive_dir())
+pub fn purge_archived_convo(tool: String, sid: String, project_encoded: String) -> bool {
+    let tool = ToolKind::from_name(&tool);
+    match tool {
+        ToolKind::Claude => purge_archived(&sid, &project_encoded, &archive_dir()),
+        ToolKind::Reasonix => crate::archive::purge_archived_reasonix(&sid, &archive_dir()),
+    }
 }
 
 /// 一次性迁移：清空归档区（v0.4.26 前的旧结构被 P0 #1 bug 销毁过，数据
@@ -224,14 +275,22 @@ pub fn delete_all_orphans() -> u32 {
 // Launch Claude Code
 // ---------------------------------------------------------------------------
 
-/// Launch a Claude Code session in `path`.
-/// - `sid` None / empty => new session (`claude`)
-/// - `sid` Some        => resume (`claude --resume <sid>`)
+/// Launch a coding-agent session in `path` for `tool`.
+/// - `sid` None / empty => new session (bare CLI command)
+/// - `sid` Some        => resume the given session
+///
+/// The exact resume form is tool-specific (`claude --resume X` vs
+/// `reasonix --resume X`); see `ToolKind::launch_cmd`.
 ///
 /// Spawns an independent terminal window (Windows Terminal, fallback cmd),
 /// detached via `.spawn()` so the Tauri main process never blocks.
 #[tauri::command]
-pub fn open_claude_session(path: String, sid: Option<String>) -> Result<(), String> {
+pub fn open_session(
+    tool: String,
+    path: String,
+    sid: Option<String>,
+) -> Result<(), String> {
+    let tool = ToolKind::from_name(&tool);
     let dir = std::path::PathBuf::from(&path);
     // Validate directory exists; fallback to home if somehow missing.
     let dir = if dir.is_dir() {
@@ -242,25 +301,42 @@ pub fn open_claude_session(path: String, sid: Option<String>) -> Result<(), Stri
             .map_err(|_| "无法定位用户主目录".to_string())?;
         std::path::PathBuf::from(home)
     };
-    let claude_cmd = match &sid {
-        Some(s) if !s.is_empty() => {
-            // sid 直接拼进 shell 命令（claude --resume <sid>），必须校验是合法
-            // 会话 ID（UUID 8-4-4-4-12 十六进制），否则含 shell 元字符（& | > 等）
-            // 的伪造 sid 会触发命令注入。正常 sid 来自 jsonl 文件名，必为 UUID；
-            // 这里挡的是 IPC 被直接构造调用的情况。评审 P2 #8 修复。
-            if !is_valid_session_id(s) {
-                return Err(format!("非法会话 ID: {}", s));
-            }
-            format!("claude --resume {}", s)
+    let sid = sid.and_then(|s| {
+        let s = s.trim();
+        if s.is_empty() {
+            None
+        } else {
+            Some(s.to_string())
         }
-        _ => "claude".to_string(),
-    };
-    spawn_terminal(&dir, &claude_cmd)
+    });
+    // Validate the sid shape against shell injection. Each tool's id format
+    // differs (Claude = UUID, Reasonix = filename stem), so dispatch by tool.
+    if let Some(ref s) = sid {
+        if !is_valid_session_id_for(tool, s) {
+            return Err(format!("非法会话 ID: {}", s));
+        }
+    }
+    let cmd = tool.launch_cmd(sid.as_deref());
+    spawn_terminal(&dir, &cmd)
+}
+
+/// Whether `s` is a safe (shell-injection-free) session id for `tool`.
+fn is_valid_session_id_for(tool: ToolKind, s: &str) -> bool {
+    match tool {
+        ToolKind::Claude => is_valid_uuid(s),
+        // Reasonix ids are filename stems like "20260603-090200.000-deepseek-v4-flash".
+        // Allow alphanumerics, dash, dot, underscore — no shell metacharacters.
+        ToolKind::Reasonix => {
+            !s.is_empty()
+                && s.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.' || c == '_')
+        }
+    }
 }
 
 /// 校验字符串是合法的 Claude Code 会话 ID（UUID v4 格式：8-4-4-4-12
-/// 十六进制，全小写或全大写）。用于 open_claude_session 防 shell 注入。
-fn is_valid_session_id(s: &str) -> bool {
+/// 十六进制，全小写或全大写）。用于 `is_valid_session_id_for` 防 shell 注入。
+fn is_valid_uuid(s: &str) -> bool {
     // 长度 36（32 hex + 4 dash），dash 位置固定在 8/13/18/23。
     if s.len() != 36 {
         return false;
@@ -285,32 +361,50 @@ fn is_valid_session_id(s: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::is_valid_session_id;
+    use super::{is_valid_session_id_for, is_valid_uuid, ToolKind};
 
     #[test]
-    fn test_valid_session_id_accepted() {
-        assert!(is_valid_session_id("aaaa1111-2222-3333-4444-555555555555"));
-        assert!(is_valid_session_id("ABCDEF12-3456-7890-ABCD-EF1234567890"));
-        assert!(is_valid_session_id("00000000-0000-0000-0000-000000000000"));
+    fn test_valid_uuid_accepted() {
+        assert!(is_valid_uuid("aaaa1111-2222-3333-4444-555555555555"));
+        assert!(is_valid_uuid("ABCDEF12-3456-7890-ABCD-EF1234567890"));
+        assert!(is_valid_uuid("00000000-0000-0000-0000-000000000000"));
     }
 
     #[test]
     fn test_shell_injection_rejected() {
         // 评审 P2 #8：含 shell 元字符的伪造 sid 必须被拒绝。
-        assert!(!is_valid_session_id("foo & echo pwned"));
-        assert!(!is_valid_session_id("a;rm -rf /"));
-        assert!(!is_valid_session_id("x | calc"));
-        assert!(!is_valid_session_id("a\"b"));
-        assert!(!is_valid_session_id("$(whoami)"));
-        assert!(!is_valid_session_id(""));
+        assert!(!is_valid_uuid("foo & echo pwned"));
+        assert!(!is_valid_uuid("a;rm -rf /"));
+        assert!(!is_valid_uuid("x | calc"));
+        assert!(!is_valid_uuid("a\"b"));
+        assert!(!is_valid_uuid("$(whoami)"));
+        assert!(!is_valid_uuid(""));
     }
 
     #[test]
     fn test_malformed_uuid_rejected() {
-        assert!(!is_valid_session_id("aaaa1111-2222-3333-4444")); // 太短
-        assert!(!is_valid_session_id("aaaa1111-2222-3333-4444-555555555555-extra")); // 太长
-        assert!(!is_valid_session_id("aaaa1111z2222-3333-4444-555555555555")); // dash 位置错
-        assert!(!is_valid_session_id("aaaa1111-2222-3333-4444-55555555555z")); // 非 hex
+        assert!(!is_valid_uuid("aaaa1111-2222-3333-4444")); // 太短
+        assert!(!is_valid_uuid("aaaa1111-2222-3333-4444-555555555555-extra")); // 太长
+        assert!(!is_valid_uuid("aaaa1111z2222-3333-4444-555555555555")); // dash 位置错
+        assert!(!is_valid_uuid("aaaa1111-2222-3333-4444-55555555555z")); // 非 hex
+    }
+
+    #[test]
+    fn test_valid_session_id_for_per_tool() {
+        // Claude requires UUID shape.
+        assert!(is_valid_session_id_for(
+            ToolKind::Claude,
+            "aaaa1111-2222-3333-4444-555555555555"
+        ));
+        // Reasonix ids are filename stems — alnum/dash/dot/underscore only.
+        assert!(is_valid_session_id_for(
+            ToolKind::Reasonix,
+            "20260603-090200.000-deepseek-v4-flash"
+        ));
+        // Shell metacharacters rejected for both tools.
+        assert!(!is_valid_session_id_for(ToolKind::Reasonix, "a & calc"));
+        assert!(!is_valid_session_id_for(ToolKind::Reasonix, "a|b"));
+        assert!(!is_valid_session_id_for(ToolKind::Reasonix, ""));
     }
 }
 
@@ -345,6 +439,66 @@ pub fn open_in_explorer(path: String) -> Result<(), String> {
     }
 }
 
+/// Open a blank terminal window at the user's home directory. Used by the
+/// "未安装" page's "打开" button: the user copies the install command with the
+/// adjacent copy button, then pastes+runs it here. We do NOT pre-fill or
+/// auto-execute the install command — two decoupled buttons keep the flow
+/// predictable and let the user review the command before running it.
+///
+/// The home dir is the natural place (npm global installs live under the
+/// user profile), and it always exists. Falls back to the system temp if the
+/// home env vars are somehow missing.
+#[tauri::command]
+pub fn open_install_terminal() -> Result<(), String> {
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::env::temp_dir());
+    // Empty command => spawn_terminal opens an interactive shell at `home`
+    // (wt -d <home> cmd /k "" would run an empty line; instead pass a harmless
+    // echo-free form by using a no-op). The simplest reliable shape is to not
+    // pass a command at all: spawn a plain cmd via wt so the user lands on a
+    // fresh prompt. We inline a minimal spawn here rather than reuse
+    // spawn_terminal (which expects a command string for its /k form).
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NEW_CONSOLE: u32 = 0x00000010;
+        let dir_str = home.to_string_lossy().to_string();
+        // Preferred: Windows Terminal at <home>, plain cmd (no command => the
+        // user lands on a fresh prompt and pastes the install command).
+        let wt_ok = std::process::Command::new("wt")
+            .args(["-d", &dir_str, "cmd"])
+            .creation_flags(CREATE_NEW_CONSOLE)
+            .spawn()
+            .is_ok();
+        if wt_ok {
+            return Ok(());
+        }
+        // Fallback: classic console. 用 current_dir 设工作目录而非手动拼
+        // `cd /d "<home>"`——后者在 home 含特殊字符时引号拼接脆弱，current_dir
+        // 走 OS 原生进程属性，无注入面。start 第一个 token 会被当窗口标题，
+        // 故给个空串占位避开这个 cmd 经典坑。
+        std::process::Command::new("cmd")
+            .current_dir(&home)
+            .args(["/C", "start", "", "cmd"])
+            .creation_flags(CREATE_NEW_CONSOLE)
+            .spawn()
+            .map_err(|e| format!("无法打开终端: {e}"))?;
+        Ok(())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let term = std::env::var("TERMINAL")
+            .unwrap_or_else(|_| "x-terminal-emulator".to_string());
+        std::process::Command::new(&term)
+            .current_dir(&home)
+            .spawn()
+            .map_err(|e| format!("无法打开终端 {}: {}", term, e))?;
+        Ok(())
+    }
+}
+
 /// Hide the main window. Called by the frontend AFTER its close animation
 /// finishes — this is the real "hide" that follows the slide-out animation.
 #[tauri::command]
@@ -361,6 +515,17 @@ pub fn hide_window(app: tauri::AppHandle) {
 #[tauri::command]
 pub fn set_dialog_open(open: bool) {
     crate::set_dialog_open_internal(open);
+}
+
+/// Which CLI tools are installed on PATH. The frontend uses this to disable
+/// the tool switcher for tools that aren't installed (can't manage sessions
+/// for a CLI that doesn't exist). Returns a map of tool name → bool.
+#[tauri::command]
+pub fn get_installed_tools() -> std::collections::HashMap<String, bool> {
+    let mut out = std::collections::HashMap::new();
+    out.insert("claude".to_string(), ToolKind::Claude.is_installed());
+    out.insert("reasonix".to_string(), ToolKind::Reasonix.is_installed());
+    out
 }
 
 /// Active default model state for the model-switcher UI.
@@ -438,15 +603,26 @@ pub fn delete_related_files(sid: String, paths: Vec<String>) -> Result<u64, Stri
     Ok(delete_paths(&paths, &sid, &root))
 }
 
-/// Rename a Claude Code session by appending a `custom-title` line to its jsonl
-/// transcript. This is the SAME mechanism the `/rename` slash command uses:
-/// `/resume` reads the most recent `{"type":"custom-title","customTitle":"..."}`
-/// entry as the session's display name. Appending is idempotent — calling
-/// rename again just means the newer title wins; no rewrite of history.
+/// Rename a session. Claude Code only — appends a `custom-title` line to its
+/// jsonl transcript, the SAME mechanism the `/rename` slash command uses
+/// (`/resume` reads the most recent `{"type":"custom-title","customTitle":...}`
+/// entry as the display name). Appending is idempotent.
+///
+/// Other tools (Reasonix) don't expose this mechanism via their data files, so
+/// renaming returns an error (a future version may add Cove-local aliases).
 ///
 /// Returns the new title on success.
 #[tauri::command]
-pub fn rename_session(sid: String, project_encoded: String, name: String) -> Result<String, String> {
+pub fn rename_session(
+    tool: String,
+    sid: String,
+    project_encoded: String,
+    name: String,
+) -> Result<String, String> {
+    let tool_kind = ToolKind::from_name(&tool);
+    if tool_kind != ToolKind::Claude {
+        return Err(format!("{} 暂不支持会话重命名", tool_kind.display_name()));
+    }
     let trimmed = name.trim();
     if trimmed.is_empty() {
         return Err("名称不能为空".to_string());
@@ -483,20 +659,19 @@ pub fn rename_session(sid: String, project_encoded: String, name: String) -> Res
 }
 
 /// Read a full session transcript (every user/assistant turn, block-preserving)
-/// for the session-history viewer.
+/// for the session-history viewer. `project_key` is the Claude encoded dir name
+/// (Claude) or the cwd (Reasonix) — used to locate the right file.
 #[tauri::command]
 pub fn get_session_transcript(
+    tool: String,
     sid: String,
-    project_encoded: String,
+    project_key: String,
 ) -> Result<SessionTranscript, String> {
-    let jsonl = claude_dir()
-        .join("projects")
-        .join(&project_encoded)
-        .join(format!("{sid}.jsonl"));
-    if !jsonl.exists() {
-        return Err(format!("找不到会话文件: {}", jsonl.display()));
-    }
-    transcript::parse(&jsonl, &sid)
+    let tool = ToolKind::from_name(&tool);
+    let jsonl = tool
+        .session_path(&sid, &project_key)
+        .ok_or_else(|| format!("找不到会话文件: {sid}"))?;
+    tool.parse_transcript(&jsonl, &sid)
         .ok_or_else(|| format!("读取会话失败: {}", jsonl.display()))
 }
 

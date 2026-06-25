@@ -1,4 +1,4 @@
-import { api, Conversation } from "../api";
+import { api, Conversation, ToolName } from "../api";
 import { icon } from "../styles/icons";
 import { confirmDialog, toast, promptDialog } from "./confirm";
 import { escapeHtml, formatSize, formatTime, showConvoInfo, fullDeleteConfirmOptions, animateRemoveCard } from "./projects";
@@ -18,9 +18,10 @@ import { open } from "@tauri-apps/plugin-dialog";
  */
 export async function renderLooseView(
     container: HTMLElement,
+    tool: ToolName,
     onSelectSession: (sid: string, encoded: string, projPath: string, title: string) => void
 ): Promise<void> {
-    const convos = await api.getLooseConversations();
+    const convos = await api.getLooseConversations(tool);
 
     if (convos.length === 0) {
         container.innerHTML = `
@@ -35,7 +36,7 @@ export async function renderLooseView(
                     <div class="hint">未归入项目的 Claude Code 会话会显示在这里</div>
                 </div>
             </div>`;
-        bindNewChatButton(container);
+        bindNewChatButton(container, tool);
         return;
     }
 
@@ -76,7 +77,7 @@ export async function renderLooseView(
             ${convos.map(renderCard).join("")}
         </div>`;
 
-    bindNewChatButton(container);
+    bindNewChatButton(container, tool);
 
     // Click anywhere on the row (sub-main) => open the transcript viewer.
     // 不再只绑定标题文字——整个左侧内容区（标题+meta+预览）都可点进详情。
@@ -111,7 +112,7 @@ export async function renderLooseView(
             if (action === "resume") {
                 const cwd = btn.dataset.cwd!;
                 try {
-                    await api.openClaudeSession(cwd, sid);
+                    await api.openSession(tool, cwd, sid);
                 } catch (err) {
                     toast("启动失败：" + String(err));
                 }
@@ -132,7 +133,7 @@ export async function renderLooseView(
                 });
                 if (!name || !name.trim()) return;
                 try {
-                    const newName = await api.renameSession(sid, encoded, name);
+                    const newName = await api.renameSession(tool, sid, encoded, name);
                     // In-place update keeps scroll position and feels instant.
                     if (titleEl) titleEl.textContent = newName;
                     toast("已重命名为：" + newName);
@@ -148,13 +149,13 @@ export async function renderLooseView(
                 if (!ok) return;
                 const card = btn.closest(".card") as HTMLElement;
                 const success = await animateRemoveCard(card, () =>
-                    api.deleteConvo(sid, encoded)
+                    api.deleteConvo(tool, sid, encoded)
                 );
                 if (success) toast("已删除会话");
             } else if (action === "archive") {
                 const card = btn.closest(".card") as HTMLElement;
                 const success = await animateRemoveCard(card, () =>
-                    api.archiveConvo(sid, encoded)
+                    api.archiveConvo(tool, sid, encoded)
                 );
                 if (success) toast("已归档会话");
             }
@@ -187,10 +188,10 @@ function renderNewChatButton(): string {
 }
 
 /** 绑定新对话按钮的两种点击（主体静默开 / 箭头弹菜单）。 */
-function bindNewChatButton(scope: HTMLElement): void {
+function bindNewChatButton(scope: HTMLElement, tool: ToolName): void {
     const mainBtn = scope.querySelector<HTMLElement>("#new-chat-btn");
     const caretBtn = scope.querySelector<HTMLElement>("#new-chat-caret");
-    if (mainBtn) mainBtn.addEventListener("click", () => void onNewChatClick());
+    if (mainBtn) mainBtn.addEventListener("click", () => void onNewChatClick(tool));
     if (caretBtn) caretBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         showWorkspaceMenu(caretBtn);
@@ -202,12 +203,12 @@ function bindNewChatButton(scope: HTMLElement): void {
  *  1. 有默认目录 → 静默开新会话（api.openClaudeSession(path)）。
  *  2. 无默认目录（首次）→ 弹说明浮层，确认后弹文件夹选择器。
  */
-async function onNewChatClick(): Promise<void> {
+async function onNewChatClick(tool: ToolName): Promise<void> {
     let workspace = await api.getDefaultWorkspace();
     if (workspace && workspace.trim()) {
         // 已配置：静默开新会话。
         try {
-            await api.openClaudeSession(workspace);
+            await api.openSession(tool, workspace);
         } catch (err) {
             toast("启动失败：" + String(err));
         }
@@ -226,7 +227,7 @@ async function onNewChatClick(): Promise<void> {
     if (!picked) return;
     try {
         await api.setDefaultWorkspace(picked);
-        await api.openClaudeSession(picked);
+        await api.openSession(tool, picked);
         toast("默认目录已设置，正在打开新会话");
     } catch (err) {
         toast("设置失败：" + String(err));

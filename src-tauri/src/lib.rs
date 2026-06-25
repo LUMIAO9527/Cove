@@ -8,6 +8,7 @@ pub mod projects_config;
 pub mod related;
 pub mod scan;
 pub mod settings;
+pub mod tools;
 pub mod transcript;
 
 use std::sync::Mutex;
@@ -179,8 +180,9 @@ pub fn run() {
             commands::scan_orphan_data,
             commands::delete_orphan,
             commands::delete_all_orphans,
-            commands::open_claude_session,
+            commands::open_session,
             commands::open_in_explorer,
+            commands::open_install_terminal,
             commands::hide_window,
             commands::get_model_state,
             commands::set_default_tier_cmd,
@@ -191,6 +193,7 @@ pub fn run() {
             commands::rename_session,
             commands::get_session_transcript,
             commands::set_dialog_open,
+            commands::get_installed_tools,
         ])
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::CloseRequested { api, .. } => {

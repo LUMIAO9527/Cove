@@ -19,7 +19,8 @@ type IconName =
     | "edit"
     | "chevron"
     | "info"
-    | "plus";
+    | "plus"
+    | "copy";
 
 const PATHS: Record<IconName, string> = {
     // 文件夹（项目）
@@ -68,6 +69,8 @@ const PATHS: Record<IconName, string> = {
     info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="8" r="0.6" fill="currentColor" stroke="none"/>',
     // 加号（新建会话）
     plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
+    // 复制（剪贴板，未安装页"点击复制命令"按钮）
+    copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2"/>',
 };
 
 /** 生成指定图标的 SVG 字符串（可直接插入 innerHTML） */

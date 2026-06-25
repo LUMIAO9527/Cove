@@ -1,4 +1,4 @@
-import { api, Project, Conversation, ModelState, ModelInfo } from "../api";
+import { api, Project, Conversation, ModelState, ModelInfo, ToolName } from "../api";
 import { icon } from "../styles/icons";
 import { toast, promptDialog, confirmDialog } from "./confirm";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -106,10 +106,11 @@ export async function animateRemoveCard(
  */
 export async function renderProjectsView(
     container: HTMLElement,
+    tool: ToolName,
     onSelectProject: (p: Project) => void,
     onSelectSession: (sid: string, encoded: string, projPath: string, title: string, restorePath?: string) => void
 ): Promise<void> {
-    const projects = await api.getProjects();
+    const projects = await api.getProjects(tool);
 
     container.innerHTML = `
         <div class="scroll-area">
@@ -175,8 +176,8 @@ export async function renderProjectsView(
         }
         if (!selected) return;
         try {
-            await api.addProject(selected);
-            await renderProjectsView(container, onSelectProject, onSelectSession);
+            await api.addProject(tool, selected);
+            await renderProjectsView(container, tool, onSelectProject, onSelectSession);
             toast("已添加项目");
         } catch (err) {
             toast("添加失败：" + String(err));
@@ -205,7 +206,7 @@ export async function renderProjectsView(
             const action = btn.dataset.action!;
             if (action === "new-session") {
                 try {
-                    await api.openClaudeSession(path);
+                    await api.openSession(tool, path);
                 } catch (err) {
                     toast("启动失败：" + String(err));
                 }
@@ -225,12 +226,13 @@ export async function renderProjectsView(
                 }
                 // 展开：拉取会话，渲染最近 5 条，按钮文案切「收起」。
                 try {
-                    const all = await api.getProjectDetail(path);
+                    const all = await api.getProjectDetail(tool, path);
                     const recent = all.slice(0, 5);
                     renderInlineSessions(
                         body,
                         recent,
                         proj,
+                        tool,
                         (sid, title) => onSelectSession(sid, proj.encoded_name, proj.path, title, proj.path)
                     );
                     card.classList.add("is-expanded");
@@ -268,7 +270,7 @@ export async function renderProjectsView(
                 });
                 if (!name || !name.trim()) return;
                 try {
-                    const updated = await api.renameProject(path, name);
+                    const updated = await api.renameProject(tool, path, name);
                     proj.name = updated.name;
                     if (titleEl) titleEl.textContent = updated.name;
                     toast("已重命名为：" + updated.name);
@@ -287,8 +289,8 @@ export async function renderProjectsView(
                 });
                 if (!ok) return;
                 try {
-                    await api.removeProject(path);
-                    await renderProjectsView(container, onSelectProject, onSelectSession);
+                    await api.removeProject(tool, path);
+                    await renderProjectsView(container, tool, onSelectProject, onSelectSession);
                     toast("已移除项目");
                 } catch (err) {
                     toast("移除失败：" + String(err));
@@ -312,6 +314,7 @@ function renderInlineSessions(
     body: HTMLElement,
     convos: Conversation[],
     proj: Project,
+    tool: ToolName,
     onSelectSession: (sid: string, title: string) => void
 ): void {
     if (convos.length === 0) {
@@ -375,7 +378,7 @@ function renderInlineSessions(
 
             if (action === "resume") {
                 try {
-                    await api.openClaudeSession(proj.path, sid);
+                    await api.openSession(tool, proj.path, sid);
                 } catch (err) {
                     toast("启动失败：" + String(err));
                 }
@@ -393,7 +396,7 @@ function renderInlineSessions(
                 });
                 if (!name || !name.trim()) return;
                 try {
-                    const newName = await api.renameSession(sid, encoded, name);
+                    const newName = await api.renameSession(tool, sid, encoded, name);
                     if (titleEl) titleEl.textContent = newName;
                     toast("已重命名为：" + newName);
                 } catch (err) {
@@ -408,8 +411,8 @@ function renderInlineSessions(
                 if (!ok) return;
             }
             const op = action === "delete"
-                ? () => api.deleteConvo(sid, encoded)
-                : () => api.archiveConvo(sid, encoded);
+                ? () => api.deleteConvo(tool, sid, encoded)
+                : () => api.archiveConvo(tool, sid, encoded);
             const success = await animateRemoveCard(card, op);
             if (success) toast(action === "delete" ? "已删除会话" : "已归档会话");
         });
@@ -455,8 +458,14 @@ export function bindCopyable(scope: HTMLElement): void {
  *  历程：200ms 太慢→缩到 120ms→仍反馈偏慢→再缩到 60ms。 */
 export function attachHoverFlyout(
     anchor: HTMLElement,
-    buildFlyout: () => HTMLElement
+    buildFlyout: () => HTMLElement | null
 ): void {
+    // 防重复绑定：modelEl 这类持久元素每次切工具/切 tab 都会重跑 renderHeader，
+    // 没有 idempotent 守卫的话每次都叠一组 mouseenter/mouseleave 监听，累积成
+    // 内存泄漏 + 多余事件。卡片元素随重渲染重建不触发此问题，但守卫对两者都安全。
+    if (anchor.dataset.hoverFlyoutBound === "1") return;
+    anchor.dataset.hoverFlyoutBound = "1";
+
     let flyout: HTMLElement | null = null;
     let closeTimer: number | null = null;
 
@@ -476,8 +485,12 @@ export function attachHoverFlyout(
     const open = (): void => {
         cancelClose();
         if (flyout) return;
+        // buildFlyout 返回 null 表示本次不弹浮层（如模型胶囊切到非 Claude 工具时，
+        // 旧 hover 监听仍在但不应再弹菜单）。返回 null 直接 return，不 append 任何东西。
+        const built = buildFlyout();
+        if (!built) return;
         document.querySelectorAll(".project-info-flyout").forEach((e) => e.remove());
-        flyout = buildFlyout();
+        flyout = built;
         document.body.appendChild(flyout);
         const r = anchor.getBoundingClientRect();
         flyout.style.right = window.innerWidth - r.right + "px";
@@ -566,13 +579,48 @@ function tierModel(info: ModelInfo, tier: string): string {
 
 let modelStateCache: ModelState | null = null;
 
-export async function renderHeader(modelEl: HTMLElement): Promise<void> {
+export async function renderHeader(modelEl: HTMLElement, tool: ToolName): Promise<void> {
+    // Reasonix 的模型配置在它自己的 config.toml，Cove 不负责读写也不提供
+    // 切换。非 Claude 工具下模型胶囊显示静态"未配置"（不挂 hover 切换器），
+    // 而不是清空——避免顶栏留一块空白让人以为没渲染出来。
+    if (tool !== "claude") {
+        modelEl.classList.remove("clickable");
+        modelEl.title = "此工具的模型由其自身配置管理，Cove 不提供切换";
+        renderModelLabel(modelEl, "未配置");
+        return;
+    }
     modelEl.classList.add("clickable");
     modelEl.title = "默认模型（悬停切换）";
-    // hover 触发模型菜单（复用通用 hover-flyout 机制：mouseenter 打开、
-    // 离开带 60ms 容差关闭，避免鼠标穿越 anchor↔菜单间隙时误关）。
-    attachHoverFlyout(modelEl, () => buildModelSwitcher(modelEl));
+    // hover 触发模型菜单。attachHoverFlyout 靠 dataset 标记防重复绑定——
+    // modelEl 是 titlebar 里的持久元素，每次切 tab/工具都重跑 renderHeader，
+    // 没守卫会叠一堆 mouseenter/mouseleave 监听。复用第一次的监听器是安全的：
+    // 其闭包读模块级 modelStateCache，refreshModelLabel 每次更新它，hover 时
+    // 取的是最新模型状态。
+    // buildFlyout 内部额外检查 clickable：切到非 Claude 工具后 modelEl 上旧
+    // hover 监听仍在（守卫只挡新绑定不移除旧的），此时 hover 不应弹模型菜单，
+    // 返回 null 让 attachHoverFlyout 的 open() 跳过 append。
+    attachHoverFlyout(modelEl, () => {
+        if (!modelEl.classList.contains("clickable")) return null;
+        return buildModelSwitcher(modelEl);
+    });
     await refreshModelLabel(modelEl);
+}
+
+/** 把 label 写进模型胶囊的 marquee 结构。空/空白 label 统一降级为"未配置"，
+ *  保证胶囊永不空白（用户反馈：没配模型时不要留空）。 */
+function renderModelLabel(modelEl: HTMLElement, label: string): void {
+    const text = label && label.trim() ? label : "未配置";
+    modelEl.innerHTML = `<span class="model-marquee"><span class="model-marquee-inner"><span class="model-dot-inner"></span>${escapeHtml(text)}</span></span>`;
+    requestAnimationFrame(() => {
+        const inner = modelEl.querySelector<HTMLElement>(".model-marquee-inner");
+        const wrap = modelEl.querySelector<HTMLElement>(".model-marquee");
+        if (!inner || !wrap) return;
+        if (inner.scrollWidth - wrap.clientWidth > 4) {
+            inner.classList.add("is-overflow");
+        } else {
+            inner.classList.remove("is-overflow");
+        }
+    });
 }
 
 async function refreshModelLabel(modelEl: HTMLElement): Promise<void> {
@@ -582,14 +630,16 @@ async function refreshModelLabel(modelEl: HTMLElement): Promise<void> {
         modelStateCache = state;
         // When `model` is a direct id (cc-switch sets e.g. "DeepSeek-V4-Pro"),
         // `tier` is empty — show that raw id directly. Otherwise resolve the
-        // tier slot's clean name.
-        label = state.tier
-            ? (tierModel(state.info, state.tier) || "未配置")
-            : (state.model || "未配置");
+        // tier slot's clean name. 空字符串统一降级为"未配置"。
+        if (state.tier) {
+            label = tierModel(state.info, state.tier) || "未配置";
+        } else if (state.model) {
+            label = state.model;
+        }
     } catch {
-        /* keep default */
+        /* keep "未配置" */
     }
-    modelEl.innerHTML = `<span class="model-dot-inner"></span>${escapeHtml(label)}`;
+    renderModelLabel(modelEl, label);
 }
 
 /**
