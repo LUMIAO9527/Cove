@@ -51,8 +51,12 @@ dist-ssr
 
 # 开发私档（含本机路径、调试过程、环境清单、设计讨论）——不公开，仅本地保留。
 /HANDOFF.md
+/LOG.md
 /ENVIRONMENT.md
 /docs/
+
+# 发布用 banner：通过 GitHub Release API 单独上传到 Release，不进代码仓库。
+/dist-release/cove-banner.png
 
 # 本地 GitHub 凭证（token 等），永不提交。
 /.github-credentials.local

@@ -79,36 +79,25 @@ impl ToolKind {
 
     /// Whether the CLI is installed and reachable on PATH.
     ///
-    /// We probe by spawning the CLI's `--version` and checking it exits ok.
+    /// Implementation: **scan PATH directories for an executable file** matching
+    /// `cli_name`, resolving PATHEXT on Windows. This is a pure filesystem
+    /// existence check — O(number of PATH dirs × PATHEXT extensions), typically
+    /// <1ms — instead of spawning the CLI and waiting for it to print `--version`.
     ///
-    /// **Windows quirk (root cause of "installed but shows uninstalled")**:
-    /// npm-installed CLIs ship as `*.cmd` wrapper scripts (e.g. `claude.cmd`),
-    /// NOT `.exe`. `std::process::Command::new("claude")` on Windows resolves
-    /// the program by appending `.exe` only — it does NOT consult PATHEXT, so
-    /// it never finds `claude.cmd` and the probe silently fails. Verified: bare
-    /// `Command::new("claude")` → fail; `cmd /c claude` → ok.
+    /// **Why not spawn `--version` anymore (startup-latency fix):** the previous
+    /// probe ran `cmd /C claude --version`. On Windows `claude --version` has to
+    /// boot Node.js + load the package, costing 300–800ms per CLI. `get_installed_tools`
+    /// probes two CLIs **serially**, so the popup's first paint blocked on
+    /// ~0.6–1.6s of process spawning — that was the "启动卡顿". Switching to a
+    /// PATH scan makes install detection instant.
     ///
-    /// Fix: on Windows, run the probe through `cmd /c` so the command processor
-    /// does PATHEXT resolution (`.CMD`/`.BAT` included). The CLI's own `--version`
-    /// is fast and exits immediately, so wrapping it in cmd adds no perceptible
-    /// delay. On non-Windows, PATH resolution already works without a shell.
+    /// **PATHEXT correctness:** npm-installed CLIs ship as `.cmd` wrappers (not
+    /// `.exe`). Rust's `Command::new("claude")` only tries `.exe` and misses
+    /// `claude.cmd` — the original "installed but shows uninstalled" bug. The
+    /// PATH scan here checks every PATHEXT extension (`.COM;.EXE;.BAT;.CMD;...`),
+    /// matching exactly what `where`/`cmd` resolve, so `.cmd` CLIs are found.
     pub fn is_installed(&self) -> bool {
-        let cli = self.cli_name();
-        let mut cmd = if cfg!(target_os = "windows") {
-            let mut c = std::process::Command::new("cmd");
-            c.args(["/C", cli, "--version"]);
-            c
-        } else {
-            let mut c = std::process::Command::new(cli);
-            c.arg("--version");
-            c
-        };
-        cmd.stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .stdin(std::process::Stdio::null())
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
+        which_on_path(self.cli_name()).is_some()
     }
 
     // ---- per-tool dispatch helpers ----
@@ -148,6 +137,55 @@ impl ToolKind {
             ToolKind::Reasonix => reasonix::session_path(sid, project_key),
         }
     }
+}
+
+/// Resolve `name` to an existing executable on PATH (like the `which`/`where`
+/// command). Returns the first match as an absolute PathBuf, or None.
+///
+/// On Windows, tries every extension in PATHEXT (`.COM;.EXE;.BAT;.CMD;...`) in
+/// each PATH dir — exactly mirroring how `cmd` resolves commands, so `.cmd`
+/// npm wrappers (e.g. `claude.cmd`) are found. This is a pure file-existence
+/// scan; no process is spawned, so it's effectively instant (<1ms).
+///
+/// On Unix, tries `name` bare then `name` + no extension in each PATH dir.
+fn which_on_path(name: &str) -> Option<std::path::PathBuf> {
+    let path_env = std::env::var_os("PATH")?;
+    let dirs = std::env::split_paths(&path_env);
+
+    // PATHEXT extensions to try on Windows. Default mirrors the system default
+    // if the env var is missing. Lowercased for case-insensitive compare.
+    #[cfg(target_os = "windows")]
+    let exts: Vec<String> = std::env::var("PATHEXT")
+        .unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC".to_string())
+        .split(';')
+        .map(|s| s.to_lowercase())
+        .collect();
+    #[cfg(not(target_os = "windows"))]
+    let exts: Vec<String> = vec![String::new()]; // no extension appending on Unix
+
+    for dir in dirs {
+        #[cfg(target_os = "windows")]
+        {
+            // On Windows, try the bare name first (e.g. `claude` with no ext
+            // is rare, but cheap), then each PATHEXT ext (`claude.cmd`, etc.).
+            let candidates: Vec<std::path::PathBuf> = std::iter::once(dir.join(name))
+                .chain(exts.iter().map(|e| dir.join(format!("{}{}", name, e))))
+                .collect();
+            for c in candidates {
+                if c.is_file() {
+                    return Some(c);
+                }
+            }
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let c = dir.join(name);
+            if c.is_file() {
+                return Some(c);
+            }
+        }
+    }
+    None
 }
 
 #[cfg(test)]

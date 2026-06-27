@@ -20,7 +20,8 @@ type IconName =
     | "chevron"
     | "info"
     | "plus"
-    | "copy";
+    | "copy"
+    | "grip";
 
 const PATHS: Record<IconName, string> = {
     // 文件夹（项目）
@@ -71,6 +72,8 @@ const PATHS: Record<IconName, string> = {
     plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
     // 复制（剪贴板，未安装页"点击复制命令"按钮）
     copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2"/>',
+    // 拖拽手柄（两列各三个圆点，经典 grip 标识，仅项目卡拖拽排序用）
+    grip: '<circle cx="9" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="18" r="1.3" fill="currentColor" stroke="none"/>',
 };
 
 /** 生成指定图标的 SVG 字符串（可直接插入 innerHTML） */

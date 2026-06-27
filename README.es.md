@@ -12,7 +12,7 @@
 [![Tauri](https://img.shields.io/badge/Tauri-2.11-FFC131?logo=tauri&logoColor=black)](#architecture)
 [![Rust](https://img.shields.io/badge/Rust-1.96+-CE422B?logo=rust&logoColor=white)](#build-from-source)
 [![TypeScript](https://img.shields.io/badge/TypeScript-native-3178C6?logo=typescript&logoColor=white)](#architecture)
-[![Release](https://img.shields.io/badge/release-v0.5.0-blue?logo=github&logoColor=white)](https://github.com/LUMIAO9527/Cove/releases/latest)
+[![Release](https://img.shields.io/badge/release-v0.6.0-blue?logo=github&logoColor=white)](https://github.com/LUMIAO9527/Cove/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?logo=opensourceinitiative&logoColor=white)](./LICENSE)
 [![No Telemetry](https://img.shields.io/badge/telemetry-none-success)](#runtime-data)
 
@@ -63,8 +63,8 @@ Descarga cualquiera de estos desde [Releases](../../releases):
 | Archivo | Descripción | Tamaño |
 |------|-------------|------|
 | `Cove.exe` | Archivo único portátil — doble clic para ejecutar | ~10 MB |
-| `Cove_0.5.0_x64-setup.exe` | Instalador NSIS | ~2.2 MB |
-| `Cove_0.5.0_x64_en-US.msi` | Instalador MSI | ~3.5 MB |
+| `Cove_0.6.0_x64-setup.exe` | Instalador NSIS | ~2.2 MB |
+| `Cove_0.6.0_x64_en-US.msi` | Instalador MSI | ~3.5 MB |
 
 **Solo Windows 10/11 x64.** Tras instalar/ejecutar, aparece un icono en la bandeja; haz clic en él para desplegar el panel.
 

@@ -12,7 +12,7 @@
 [![Tauri](https://img.shields.io/badge/Tauri-2.11-FFC131?logo=tauri&logoColor=black)](#architecture)
 [![Rust](https://img.shields.io/badge/Rust-1.96+-CE422B?logo=rust&logoColor=white)](#build-from-source)
 [![TypeScript](https://img.shields.io/badge/TypeScript-native-3178C6?logo=typescript&logoColor=white)](#architecture)
-[![Release](https://img.shields.io/badge/release-v0.5.0-blue?logo=github&logoColor=white)](https://github.com/LUMIAO9527/Cove/releases/latest)
+[![Release](https://img.shields.io/badge/release-v0.6.0-blue?logo=github&logoColor=white)](https://github.com/LUMIAO9527/Cove/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?logo=opensourceinitiative&logoColor=white)](./LICENSE)
 [![No Telemetry](https://img.shields.io/badge/telemetry-none-success)](#runtime-data)
 
@@ -63,8 +63,8 @@
 | Файл | Описание | Размер |
 |------|-------------|------|
 | `Cove.exe` | Портативный один файл — двойной щелчок для запуска | ~10 МБ |
-| `Cove_0.5.0_x64-setup.exe` | Установщик NSIS | ~2.2 МБ |
-| `Cove_0.5.0_x64_en-US.msi` | Установщик MSI | ~3.5 МБ |
+| `Cove_0.6.0_x64-setup.exe` | Установщик NSIS | ~2.2 МБ |
+| `Cove_0.6.0_x64_en-US.msi` | Установщик MSI | ~3.5 МБ |
 
 **Только Windows 10/11 x64.** После установки/запуска появляется значок в трее; щёлкните по нему, чтобы открыть панель.
 

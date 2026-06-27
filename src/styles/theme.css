@@ -72,6 +72,53 @@
     --sp-4: 16px;
     --sp-5: 24px;
 
+    /* ============================================================
+       页面基准线（GUTTER）—— titlebar / footer / scroll-area 共用。
+       9px：scroll-area overflow-y:scroll 永远占位 6px 滚动条 + 3px 视觉空白，
+       配合左侧 9px padding，卡片左右距窗口边视觉等宽。 */
+    --gutter-x: 9px;
+
+    /* ============================================================
+       标题行统一规范（HEADER）—— 所有顶级页 section-label 和
+       子页面 nav-bar（is-project / is-transcript）共用一套尺寸：
+
+         图标/返回按钮占位 (--header-icon-slot)
+             ↓
+         [ICON]<gap>[主标题 ........... 右侧操作]
+                    [副标题（margin-left = title-x）]
+
+       要改尺寸只动这里，所有标题行同步生效。 */
+    --header-icon-slot: 22px;             /* 图标/返回按钮宽高 */
+    --header-icon-size: 12px;             /* svg 本体尺寸 */
+    --header-gap: 2px;                    /* 图标与主标题之间 */
+    --header-title-x: calc(var(--header-icon-slot) + var(--header-gap));
+    --header-pad-y: var(--sp-1);          /* 上下内边距（4px） */
+    --header-pad-x: var(--sp-2);          /* 左右内边距 = scroll-area 横向 padding */
+    --header-meta-gap: -1px;              /* 主副标题 margin-top（负值让基线贴近） */
+    /* 吸顶背景：毛玻璃半透明，让滚动到背后的卡片有 Mica 透出感、不是死板深条。 */
+    --header-bg-stuck: rgba(32, 32, 32, 0.88);
+    /* 吸顶圆角：上方两角圆、下方直角。设为 0 则吸顶背景是纯矩形——能避免
+       上方圆角"凹处"露出底下滚动卡片的问题。两套效果二选一：保留圆角观感
+       柔和但有露底缝隙，全直角观感稍硬但严丝合缝。当前选全直角以彻底消除
+       缝隙（用户反馈优先）。 */
+    --header-radius-top: 0;
+
+    /* ============================================================
+       浮层规范（FLYOUT）—— info 浮层（项目信息 / 会话信息）共用一套
+       尺寸 / 字号 / 标签列宽 / 行间距。要调统一外观只动这里。 */
+    --flyout-min-width: 220px;
+    --flyout-max-width: 280px;
+    --flyout-padding: var(--sp-2);
+    --flyout-row-gap: var(--sp-1);   /* 行与行之间的垂直间距 */
+    --flyout-col-gap: var(--sp-2);   /* 标签列与值列的水平间距 */
+    --flyout-label-w: 40px;          /* 标签列固定宽度，让值列左对齐 */
+    --flyout-title-size: 12.5px;     /* 浮层标题字号 */
+    --flyout-title-weight: 600;
+    --flyout-row-size: 11.5px;       /* 行字号 */
+    --flyout-mono-size: 10.5px;      /* mono 值字号（路径/ID 等） */
+    --flyout-bg: var(--bg-solid);
+    --flyout-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+
     /* 字体 — Win11 flyout 用 Segoe UI Variable，回退 Segoe UI */
     --font: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI",
             "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
@@ -175,15 +222,14 @@ button:focus-visible { outline-offset: 1px; }
 }
 
 /* ============================ 顶栏 ============================ */
-/* 顶栏：统一对齐网格。
-   左 padding sp-2(8px)：Cove 图标对齐卡片左边框。
-   右 padding sp-2 + 6px：补偿 scroll-area 的滚动条 gutter（scrollbar-gutter:stable
-   让卡片右边框比左边多 6px），使模型名右边对齐卡片右边框。
-   （scroll-area::-webkit-scrollbar 宽 6px，此处与之绑定。）
-   height 36px，元素间距 sp-2。 */
+/* 顶栏：左右 padding 用 --gutter-x（= sp-2 + 6px），与下方 scroll-area
+   内容区基准线对齐（scroll-area 的 scrollbar-gutter:stable both-edges 在
+   左右各预留 6px 滚动条空间）。footer 也用同一变量，三层左右严格对齐。 */
 .titlebar {
     height: 36px;
-    padding: 3px calc(var(--sp-2) + 6px) 0 var(--sp-2);
+    /* 左右 padding 严格对齐内容区基准线 --gutter-x，让左上角 logo
+       和 "Cove" 字与下方卡片左边缘对齐。 */
+    padding: 3px var(--gutter-x) 0 var(--gutter-x);
     display: flex;
     align-items: center;
     gap: var(--sp-2);
@@ -231,6 +277,7 @@ button:focus-visible { outline-offset: 1px; }
     user-select: none;
 }
 .tool-pill {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -244,15 +291,31 @@ button:focus-visible { outline-offset: 1px; }
     padding: 0;
     transition: background 0.12s, color 0.12s;
 }
-.tool-pill:hover:not(.is-disabled):not(.is-active) {
+/* 选中圆圈：用伪元素画一个比容器小的圆（20×20），居中覆盖在图标下面。
+   这样选中高亮更精致（不铺满整个 24px 容器），同时容器尺寸不变、与模型
+   胶囊高度保持一致。hover 时也用同样的伪元素而非整容器背景。 */
+.tool-pill::before {
+    content: "";
+    position: absolute;
+    inset: 2px;
+    border-radius: 10px;
+    background: transparent;
+    transition: background 0.12s;
+    z-index: 0;
+}
+.tool-glyph { position: relative; z-index: 1; }
+.tool-pill:hover:not(.is-disabled):not(.is-active)::before {
     background: var(--bg-hover, rgba(128, 128, 128, 0.14));
+}
+.tool-pill:hover:not(.is-disabled):not(.is-active) {
     color: var(--text-dim);
 }
 /* 选中态：每个工具用自己的品牌色背景 + 白图标。
-   Claude = Claude orange #cc785c；Reasonix = 品牌渐变（青→蓝→紫）。 */
+   Claude = Claude orange #cc785c；Reasonix = 品牌渐变（青→蓝→紫）。
+   背景画在 ::before 伪元素上（比容器小一圈），不铺满 24px。 */
 .tool-pill.is-active { color: #fff; }
-.tool-pill[data-tool="claude"].is-active { background: #cc785c; }
-.tool-pill[data-tool="reasonix"].is-active {
+.tool-pill[data-tool="claude"].is-active::before { background: #cc785c; }
+.tool-pill[data-tool="reasonix"].is-active::before {
     background: linear-gradient(135deg, #5eead4 0%, #6366f1 55%, #c4b5fd 100%);
 }
 .tool-pill.is-disabled {
@@ -297,12 +360,10 @@ button:focus-visible { outline-offset: 1px; }
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 5px;
 }
 .titlebar-model .model-marquee-inner {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
     white-space: nowrap;
     /* 锁死行高：mono + 中文 fallback 混排时默认行高会把中文顶出垂直中心，
        显式 1 让内容严格按字号居中（父级 .titlebar-model 已有 align-items:center）。 */
@@ -317,13 +378,17 @@ button:focus-visible { outline-offset: 1px; }
     45%, 55% { transform: translateX(calc(-1 * (100% - 140px))); }
     85%, 100% { transform: translateX(0); }
 }
-.titlebar-model .model-dot-inner {
+/* 模型胶囊左侧的状态点：钉在 .titlebar-model 直接子级（与 .model-marquee 并列），
+   不进 marquee-inner——这样文字轮播时绿点不跟着平移（用户反馈根因）。
+   默认绿色（--success，模型已配置）；未配置时 .is-unset 切警告橘色。 */
+.titlebar-model .model-dot {
     width: 5px;
     height: 5px;
     border-radius: 50%;
     background: var(--success);
     flex-shrink: 0;
 }
+.titlebar-model.is-unset .model-dot { background: var(--warn); }
 
 /* ============================ 内容区 ============================ */
 .content {
@@ -337,19 +402,19 @@ button:focus-visible { outline-offset: 1px; }
 /* ============================ 滚动区 ============================ */
 .scroll-area {
     flex: 1;
+    /* scrollbar-gutter:stable 在右侧永远预留 6px 用于滚动条（在 padding 之外）。
+       关键是：滚动条预留的 6px 视觉等价于"留白"——配合右 padding 3px 总共 9px，
+       与左 padding 9px 完全对称。
+         - 无滚动条：右 = 3 (padding) + 6 (gutter 留白) = 9 ✓
+         - 有滚动条：右 = 3 (padding) + 6 (thumb 在 gutter 内) = 9 ✓
+       这是"无论有无滚动条，两边都是 9"的物理实现方式。 */
     overflow-y: auto;
-    /* top padding 为 0：顶部 sticky 的 section-label 自己负责顶部内边距。
-       若这里留 top padding，sticky 粘顶时 padding 区会透出 Mica 背景，
-       形成"冻结行和上面有一条缝隙"。bottom padding 保留，避免最后一张卡片
-       贴底。 */
-    padding: 0 var(--sp-2) var(--sp-2);
-    min-height: 0;
-    /* 预留滚动条空间：无论内容是否溢出，右侧都固定留出 scrollbar 宽度，
-       避免内容多/少时卡片宽度跳变、左右视觉不对称。 */
     scrollbar-gutter: stable;
+    /* 左 8px、右 3px + 6px gutter = 9px：左右轻微不对称是用户调出来的视觉
+       校正值（用户实际观感优先于数学对称）。 */
+    padding: 0 calc(var(--gutter-x) - 6px) var(--sp-2) calc(var(--gutter-x) - 1px);
+    min-height: 0;
 }
-/* 列表视图的滚动区水平更紧，让窄 flyout 多容纳文字、推迟省略号 */
-.scroll-area.has-list { padding: var(--sp-1) 4px var(--sp-2); }
 .scroll-area::-webkit-scrollbar { width: 6px; }
 .scroll-area::-webkit-scrollbar-track { background: transparent; }
 .scroll-area::-webkit-scrollbar-thumb {
@@ -358,55 +423,94 @@ button:focus-visible { outline-offset: 1px; }
     border: 2px solid transparent;
     background-clip: padding-box;
 }
+.scroll-area::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.24);
+    background-clip: padding-box;
+}
 .scroll-area::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.24); background-clip: padding-box; }
 
 /* ============================ 区段标题 ============================ */
+/* 顶级页 section-label 与子页面 nav-bar 共用同一套度量（--header-*）。
+   要调标题行尺寸只动 :root 里的 --header-* 变量，所有标题行同步变。 */
 .section-label {
-    /* 区块标题（项目·会话·归档·磁盘清理）：heading 级，亮白突出。
-       它是用户进入该 tab 后第一眼要定位的"我在哪个区"，应最高对比度。 */
     color: var(--fc-heading);
     font-size: var(--fs-heading);
     font-weight: var(--fw-heading);
-    /* 水平 padding 清零：让首尾元素（图标 / 操作按钮）贴 scroll-area 边界（= 卡片边框），
-       全 App 统一对齐网格。上下 padding 保留。 */
-    padding: var(--sp-2) 0 var(--sp-1);
-    min-height: 36px;
+    /* 标题行不再用负 margin 向外扩——内容区基准线 (--gutter-x) 已经把
+       卡片/图标 left 严格定在窗口 14px 处，标题行自身从 scroll-area
+       内容区起点开始即可。padding 只留上下方向。 */
+    padding: var(--header-pad-y) 0;
+    margin: 0;
+    /* 高度由 --header-icon-slot 决定，与子页面 back-btn 等高，统一标题行高度。 */
+    min-height: calc(var(--header-icon-slot) + var(--header-pad-y) * 2);
     box-sizing: border-box;
     display: flex;
     align-items: center;
-    gap: var(--sp-2);
-    margin-bottom: var(--sp-1);
+    gap: var(--header-gap);
     position: sticky;
     top: 0;
     z-index: 2;
+    /* 常态透明：最顶端不出现底色横条。吸顶滚动时由 .is-stuck 切到半透明实色。
+       transform:translateZ(0) 强制提前建合成层——不加的话浏览器要在首次滚动
+       那一瞬"按需建层"，能看到一闪。提前建层是 sticky 元素稳定的标准技巧。 */
+    background: transparent;
+    border-radius: var(--header-radius-top) var(--header-radius-top) 0 0;
+    transform: translateZ(0);
+}
+.section-label.is-stuck,
+.nav-bar.is-stuck {
+    background-color: var(--header-bg-stuck);
 }
 .section-label .icon { color: var(--text-dim); }
+/* 顶级页标题图标：占位 = --header-icon-slot，本体 = --header-icon-size，
+   居中显示，让图标本体可以小于占位（视觉更窄、却仍与 back-btn 同槽）。 */
+.section-label > svg {
+    width: var(--header-icon-slot);
+    height: var(--header-icon-slot);
+    padding: calc((var(--header-icon-slot) - var(--header-icon-size)) / 2);
+    margin: 0;
+    flex-shrink: 0;
+    box-sizing: border-box;
+}
 
-/* 项目详情页（conversations）的 section-label 是导航标题（项目名），
-   需要撑满 back-btn 和 section-action 之间的空间。
-   背景/横线已在 section-label 基础规则统一去除，这里只保留布局。 */
+/* 项目详情页（conversations）的 section-label 是导航标题（项目名）。
+   嵌在 nav-bar 内部时不参与 sticky：父 nav-bar 已是 sticky，子 section-label
+   再 sticky 会形成自己的 stacking context，与同行兄弟节点（如 ▾ caret）发生
+   层级冲突，导致 caret hover 触发被吞掉（root cause of 项目详情页 ▾ 不弹）。 */
 .nav-bar.is-project .section-label {
     flex: 1;
     min-width: 0;
+    min-height: auto;
+    /* 字号与项目列表页的项目卡片标题一致（fs-title=13px）。 */
+    font-size: var(--fs-title);
+    padding: 0;
+    margin: 0;
+    /* 关键：解除 sticky/z-index，避免吞 caret 的 hover 事件。背景统一交给 .nav-bar。 */
+    position: static;
+    z-index: auto;
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-radius: 0;
 }
+/* is-stuck 也强制透明：sticky watcher 命中 .section-label 后会给嵌套
+   section-label 加 is-stuck，没这一条会出现"项目名横条变黑"。 */
+.nav-bar.is-project .section-label.is-stuck {
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+/* is-project 直接继承基础 .nav-bar 的 padding/margin/gap/圆角，无需覆盖。 */
+.nav-bar.is-project { align-items: center; }
 
-/* section-label 右侧的操作按钮（项目页"添加"、散落对话页"新对话"等）：
-   统一标尺——ghost 风格（不抢视觉焦点）、小尺寸、与标题同行右对齐。
-   原来的 btn-accent 蓝色实心太抢眼，压过下方安静的卡片列表。 */
-.section-label .section-action {
-    margin-left: auto;
-    height: 24px;
-    padding: 0 10px;
-    font-size: 11px;
-    border-radius: var(--radius-sm);
-}
-/* nav-bar（项目详情/会话历史 子页面）里的主操作按钮也用同一标尺：
-   之前是 .btn/.btn-accent + 内联 style（蓝色实心/带边框大按钮），
-   和 tab 页 section-label 内的 section-action 风格不一致。统一成 ghost。 */
+/* section-label / nav-bar 右侧的操作按钮（"添加"、"新对话"、"继续"等）：
+   统一标尺，高度与返回按钮/图标占位一致（--header-icon-slot），让标题行
+   所有元素严格等高，不再因右侧按钮把整行撑高。 */
+.section-label .section-action,
 .nav-bar .section-action {
     margin-left: auto;
-    height: 24px;
-    padding: 0 10px;
+    height: var(--header-icon-slot);
+    padding: 0 8px;
     font-size: 11px;
     border-radius: var(--radius-sm);
 }
@@ -432,6 +536,17 @@ button:focus-visible { outline-offset: 1px; }
 .card:hover {
     background: var(--bg-hover);
     border-color: var(--bg-stroke-strong);
+}
+/* 浮层打开时维持卡片 hover 高亮：鼠标从卡片移到 info 浮层时，:hover 消失，
+   但视觉上应保持高亮直到浮层关闭（JS 给卡片加 .is-flyout-open）。 */
+.card.is-flyout-open,
+.sub-session.is-flyout-open {
+    background: var(--bg-hover);
+    border-color: var(--bg-stroke-strong);
+}
+.expand-body .sub-session.is-flyout-open {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: var(--bg-stroke);
 }
 .card:active { background: var(--bg-active); }
 .card.is-static { cursor: default; border-color: transparent; }
@@ -470,6 +585,16 @@ button:focus-visible { outline-offset: 1px; }
     align-items: center;
     gap: 3px;
 }
+/* 会话详情页的"已归档"徽章（归档会话无继续按钮，用徽章提示状态）。 */
+.nav-bar .arch-badge {
+    margin-left: auto;
+    font-size: 10.5px;
+    color: var(--warn);
+    background: var(--warn-soft);
+    padding: 2px 8px;
+    border-radius: var(--radius-xs);
+    flex-shrink: 0;
+}
 .card .meta .model-tag {
     color: var(--accent-hover);
     font-family: var(--mono);
@@ -492,7 +617,10 @@ button:focus-visible { outline-offset: 1px; }
     display: flex;
     align-items: center;
     gap: var(--sp-2);
-    padding: var(--sp-1) 0 var(--sp-2);
+    /* top padding 收紧（sp-1→0）：与上方 nav-bar 的 bottom padding 叠加后间距过大
+       （用户反馈：项目详情页标题"Remote"到路径行间距明显偏大）。
+       nav-bar 已有 4px bottom padding，这里 top 归零，间距由 8px→4px。 */
+    padding: 0 0 var(--sp-2);
 }
 /* 路径文字：去掉背景框/边框，与上方 nav-bar、下方会话卡片统一为
    透明无框风格。只有 hover 时给弱底色反馈（点击复制）。 */
@@ -536,6 +664,16 @@ button:focus-visible { outline-offset: 1px; }
     font-size: 10.5px;          /* 对齐 .path-chip 字号，视觉更统一 */
     white-space: nowrap;
 }
+/* 项目卡路径行：mono、淡色、单行省略。让项目卡信息更丰富（用户反馈太单薄）。
+   hover 标题属性看完整路径。 */
+.card .card-path {
+    color: var(--text-faint);
+    font-size: 10.5px;
+    margin-top: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 .card .preview {
     color: var(--text-dim);
     font-size: 11.5px;
@@ -574,6 +712,61 @@ button:focus-visible { outline-offset: 1px; }
 
 /* 右上角 info 图标按钮（现在卡片只有这一个 card-action-icon） */
 .card .card-action-icon.project-info { right: var(--sp-2); }
+
+/* —— 拖拽手柄（项目卡左侧，方案 B：hover 浮现，不占布局）——
+   与右上 info 按钮左右对称，垂直居中。默认隐藏（opacity:0），hover 卡片时淡入。
+   按住手柄拖拽（HTML5 draggable）；卡片本身不 draggable，点击卡片仍进独立页。
+   cursor:grab 明示可拖，拖拽中（.is-dragging）切 grabbing。 */
+/* —— 拖拽手柄（项目卡左侧，方案 B 修订版）——
+   去掉外框和位移：6 个点直接画在卡片左侧内部 padding 区（卡片左 padding sp-4=16px，
+   足够容纳 14px 图标），垂直居中，无背景框。
+   ⚠️ 隐藏方式：之前用 opacity:0，但 Chromium 对 opacity:0 元素拒绝发起 drag；
+   改用 color:transparent 又导致手柄完全看不见、用户不知道按哪。
+   折中：默认用极淡灰色（text-faint 的 40% 透明度，肉眼可见但不抢眼），hover 变亮。
+   元素 opacity 始终为 1，drag 可正常发起。
+   按住手柄拖拽（HTML5 draggable）；卡片本身不 draggable，点击卡片仍进独立页。 */
+.card .card-drag-handle {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 22px;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    color: var(--text-faint);
+    opacity: 0.4;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+    padding: 0;
+    transition: opacity 0.12s ease, color 0.12s ease;
+    z-index: 2;
+    line-height: 0;
+}
+.card.is-reorderable:hover .card-drag-handle,
+.card.is-reorderable:focus-within .card-drag-handle { opacity: 1; }
+.card.is-reorderable:hover .card-drag-handle { color: var(--text-dim); }
+.card-drag-handle:hover { color: var(--text); }
+.card-drag-handle:active { cursor: grabbing; }
+/* 展开后隐藏手柄。 */
+.card.is-reorderable.is-expanded .card-drag-handle { opacity: 0 !important; pointer-events: none; }
+/* 拖拽中的源卡片：降透明度，让用户看清"正在拖这个"。
+   落点指示：目标卡片上/下边缘一条 accent 线（2px），告诉用户松手会插哪。 */
+.card.is-dragging { opacity: 0.4; }
+.card.is-drag-over-top { box-shadow: 0 -2px 0 0 var(--accent); }
+.card.is-drag-over-bottom { box-shadow: 0 2px 0 0 var(--accent); }
+
+/* 卡片删除/归档前的滑出动画（animateRemoveCard 加 .removing 后等 150ms 再移除）。
+   缺失会导致 150ms 空等、卡片突然消失无过渡。 */
+.card.removing,
+.sub-session.removing {
+    opacity: 0;
+    transform: translateX(12px);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+}
 
 /* 标题行：标题 + 右侧 info 按钮同 flex 行。
    不再用 padding-right 给 info 让位——那会让标题区比下方 meta 区窄、左右不对称。
@@ -657,9 +850,12 @@ button:focus-visible { outline-offset: 1px; }
 .sub-session .loose-title { cursor: pointer; }
 .sub-session .sub-main:hover .sub-title { color: var(--accent-hover); }
 .sub-session .sub-title {
-    font-size: 12.5px;
-    font-weight: 500;
-    color: var(--text);
+    /* 会话标题（散落对话/归档/详情列表里的会话行）：body 级，正常字重 400，
+       亮白（标题需可读但不必加粗）。统一走 token，和展开态会话标题同级——
+       会话作为项目下的子项，标题层级低于项目名(heading)，不应加粗。 */
+    font-size: var(--fs-body);
+    font-weight: var(--fw-body);
+    color: var(--fc-body);
     /* 单行省略：标题超出一行时截断加 …。
        给右侧 info 按钮留出空间，避免标题文字顶到按钮上——
        padding-right 与按钮宽度(图标13 + padding5×2=23)对齐，保证视觉留白对称。 */
@@ -682,7 +878,7 @@ button:focus-visible { outline-offset: 1px; }
     right: var(--sp-2);
     background: transparent;
     border: none;
-    color: var(--text-dim);
+    color: var(--text-faint);
     padding: 5px;
     border-radius: var(--radius-sm);
     cursor: pointer;
@@ -690,11 +886,11 @@ button:focus-visible { outline-offset: 1px; }
     align-items: center;
     justify-content: center;
     line-height: 0;
-    opacity: 0;
-    transition: opacity 0.1s ease, background 0.1s ease, color 0.1s ease;
+    /* 常驻显示（和项目卡 info 按钮一致，用户反馈要常驻），用淡色不抢眼，hover 变亮。 */
+    opacity: 1;
+    transition: background 0.1s ease, color 0.1s ease;
 }
-.sub-session:hover .sub-info-btn,
-.sub-session:focus-within .sub-info-btn { opacity: 1; }
+.sub-session:hover .sub-info-btn { color: var(--text-dim); }
 .sub-session .sub-info-btn:hover {
     color: var(--accent-hover);
     background: var(--bg-hover);
@@ -791,7 +987,7 @@ button:focus-visible { outline-offset: 1px; }
 }
 .expand-body .sub-session + .sub-session { margin-top: 3px; }
 .expand-body .sub-main .meta { font-size: var(--fs-label); color: var(--fc-label); }
-.expand-body .sub-session .sub-title { font-size: var(--fs-body); font-weight: var(--fw-heading); color: var(--fc-heading); margin-bottom: 1px; }
+.expand-body .sub-session .sub-title { font-size: var(--fs-body); font-weight: var(--fw-body); color: var(--fc-body); margin-bottom: 1px; }
 .sub-empty {
     color: var(--fc-caption);
     font-size: var(--fs-meta);
@@ -925,32 +1121,32 @@ button:focus-visible { outline-offset: 1px; }
 .block-tool-use .collapsible-header { color: var(--accent); }
 .block-tool-result { border-left-color: var(--success); }
 
-/* 项目详情浮层（info 按钮） — 复用 model-switcher 的 flyout 范式 */
+/* 信息浮层（项目 info / 会话 info）—— 统一规范，引用 --flyout-* 变量。
+   要调整尺寸/字号/列宽/行距统一改 :root 的 --flyout-*。 */
 .project-info-flyout {
     position: fixed;
     z-index: 999;
-    min-width: 240px;
-    max-width: 320px;
-    background: var(--bg-solid);
+    min-width: var(--flyout-min-width);
+    max-width: var(--flyout-max-width);
+    background: var(--flyout-bg);
     border: 1px solid var(--bg-stroke-strong);
     border-radius: var(--radius);
-    padding: var(--sp-3);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    padding: var(--flyout-padding);
+    box-shadow: var(--flyout-shadow);
     animation: coveOpen 0.14s ease-out;
     font-family: var(--font);
 }
 .project-info-flyout .pif-name {
-    font-size: 13.5px;
-    font-weight: 600;
+    font-size: var(--flyout-title-size);
+    font-weight: var(--flyout-title-weight);
     color: var(--text);
-    margin-bottom: var(--sp-2);
     word-break: break-word;
     cursor: pointer;
     display: flex;
     align-items: center;
     gap: 6px;
     padding: 2px 4px;
-    margin: -2px -4px var(--sp-2);
+    margin: -2px -4px var(--sp-1);
     border-radius: var(--radius-sm);
     transition: background 0.1s ease, color 0.1s ease;
 }
@@ -967,14 +1163,15 @@ button:focus-visible { outline-offset: 1px; }
 .project-info-flyout .pif-name:hover .pif-name-edit { color: var(--accent-hover); }
 .project-info-flyout .pif-row {
     display: flex;
-    gap: var(--sp-2);
-    font-size: 11.5px;
-    margin-bottom: 4px;
+    gap: var(--flyout-col-gap);
+    font-size: var(--flyout-row-size);
+    margin-bottom: var(--flyout-row-gap);
     align-items: baseline;
 }
+.project-info-flyout .pif-row:last-child { margin-bottom: 0; }
 .project-info-flyout .pif-label {
     color: var(--text-faint);
-    min-width: 48px;
+    min-width: var(--flyout-label-w);
     flex-shrink: 0;
 }
 .project-info-flyout .pif-value {
@@ -983,12 +1180,11 @@ button:focus-visible { outline-offset: 1px; }
 }
 .project-info-flyout .pif-value.mono {
     font-family: var(--mono);
-    font-size: 10.5px;
+    font-size: var(--flyout-mono-size);
 }
 
-/* 会话信息浮层：复用 .project-info-flyout 的视觉，但纯只读——
-   标题不可点（无重命名），无底部 remove 按钮。
-   加 .is-convo 修饰覆盖交互态。 */
+/* 会话信息浮层：唯一区别——标题不参与"项目重命名"高亮 + 不可点（除非 is-renamable）。
+   尺寸/字号/列宽全部继承 .project-info-flyout，不再独立定义。 */
 .project-info-flyout.is-convo .pif-name {
     cursor: default;
 }
@@ -997,6 +1193,12 @@ button:focus-visible { outline-offset: 1px; }
     color: var(--text);
 }
 .project-info-flyout.is-convo .pif-name-edit { display: none; }
+.project-info-flyout.is-convo.is-renamable .pif-name { cursor: pointer; }
+.project-info-flyout.is-convo.is-renamable .pif-name:hover {
+    background: var(--bg-hover);
+    color: var(--accent-hover);
+}
+.project-info-flyout.is-convo.is-renamable .pif-name-edit { display: flex; }
 
 /* 可复制值：路径/目录/ID 等长文本点击即复制。hover 给可点反馈，加 copy 光标。 */
 .project-info-flyout .pif-value.copyable {
@@ -1061,9 +1263,14 @@ button:focus-visible { outline-offset: 1px; }
 .btn-ghost:active { background: var(--bg-active); }
 
 /* ============================ 底栏导航（Win 导航视图风格） ============================ */
+/* 水平 padding 对齐 scroll-area（sp-2=8px）：footer 按钮 hover/选中的背景区左缘
+   要和上方卡片左边缘严格对齐（用户反馈：hover 项目按钮时左边框没对齐）。
+   右侧补偿 scroll-area 的 scrollbar-gutter(stable) 预留的 6px 滚动条宽度——
+   scroll-area 无论是否溢出都固定留这 6px，footer 不补的话右边会差 6px。 */
 .footer {
     border-top: 1px solid var(--bg-stroke);
-    padding: var(--sp-1);
+    /* 左右 padding = --gutter-x，与 titlebar 和 scroll-area 内容左右基准对齐。 */
+    padding: var(--sp-1) var(--gutter-x);
     display: flex;
     align-items: center;
     gap: 2px;
@@ -1095,53 +1302,53 @@ button:focus-visible { outline-offset: 1px; }
 }
 
 /* ============================ 导航返回栏 ============================ */
-/* sticky 吸顶：会话详情页滚动时，返回栏+继续按钮始终可见，不需要滚回顶部。
-   复用 section-label 的毛玻璃背景方案（rgba + backdrop-filter），
-   不用实色，避免在 Mica 透出背景上压出灰条。 */
-/* 导航返回栏（项目详情 / 会话详情 / 散落对话 等子页面共用）。
-   统一对齐网格：水平 padding 清零，让首尾元素贴 scroll-area 边界（= 会话卡片边框）。
-   去掉毛玻璃背景条——全 App 统一为透明无框风格，避免在 Mica 上压出硬边灰条。
-   sticky 吸顶保留，滚动时返回按钮仍可见。 */
+/* nav-bar（项目详情 / 会话详情 / 散落对话 等子页面共用）。
+   与 .section-label 共用同一套 --header-* 度量，统一标题行视觉。 */
 .nav-bar {
     display: flex;
     align-items: center;
-    gap: var(--sp-1);
-    padding: var(--sp-2) 0 var(--sp-1);
+    gap: var(--header-gap);
+    padding: var(--header-pad-y) 0;
+    margin: 0;
     position: sticky;
     top: 0;
     z-index: 3;
     background: transparent;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
+    border-radius: var(--header-radius-top) var(--header-radius-top) 0 0;
+    transform: translateZ(0);
 }
 /* —— 会话详情页专属的两行导航栏 ——
    全局 .nav-bar 是单行（项目详情/散落对话等子页面共用）。会话详情页
    需要标题+meta 两行，加 .is-transcript 修饰类切换成列布局，
    不污染其他页面的 nav-bar。 */
 .nav-bar.is-transcript {
-    flex-direction: column;
-    gap: 2px;
-    align-items: stretch;
+    /* 两行布局：nav-row（标题行）+ nav-meta（模型·目录·时间）。
+       ⚠️ 实测在 WebView2 里 flex-direction:column / flex-wrap:wrap 都不生效
+       （疑似 WebView2 flex bug）。改用 display:block：nav-row 和 nav-meta
+       作为块级元素天然换行。padding/margin/圆角均继承基础 .nav-bar。 */
+    display: block;
 }
 /* 第一行：返回 + 标题（截断）+ 操作按钮。标题超长用 ellipsis 截断，
    完整标题靠 title 属性 hover 看，不撑爆 380px 窄窗口。 */
 .nav-bar.is-transcript .nav-row {
     display: flex;
     align-items: center;
-    gap: var(--sp-1);
+    gap: var(--header-gap);
     min-width: 0;               /* 让 flex 子项可收缩、ellipsis 生效 */
 }
 .nav-bar.is-transcript .nav-title {
-    /* 会话详情页顶部标题：title 级，亮白加粗，页面最突出的文字。 */
+    /* 会话详情页顶部标题：heading 级，padding:0 让主标题 left 严格
+       = back-btn 占位(--header-icon-slot) + --header-gap = --header-title-x，
+       与下方 nav-meta 的 margin-left 对齐。 */
     flex: 1 1 auto;
     min-width: 0;
-    font-size: var(--fs-title);
-    font-weight: var(--fw-title);
-    color: var(--fc-title);
+    padding: 0;
+    font-size: var(--fs-heading);
+    font-weight: var(--fw-heading);
+    color: var(--fc-heading);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    padding: 0 var(--sp-1);
     /* 标题区可选中复制（与 transcript 放开选中配套，见下方 .transcript 规则） */
     user-select: text;
     -webkit-user-select: text;
@@ -1150,27 +1357,61 @@ button:focus-visible { outline-offset: 1px; }
 .nav-bar.is-transcript .nav-meta {
     font-size: var(--fs-label);
     color: var(--fc-caption);
-    padding: 0 4px 2px 32px;     /* 左缩进对齐到标题（back-btn 28px + gap 4px） */
-    line-height: 1.4;
+    padding: 0;
+    margin: var(--header-meta-gap) 0 0 var(--header-title-x);
+    line-height: 1.3;
     user-select: text;
     -webkit-user-select: text;
 }
 .nav-meta-sep { opacity: 0.5; margin: 0 2px; }
+
+/* nav-row：两行布局（is-project / is-transcript）的第一行，横向排列
+   back-btn + 标题 + 操作按钮。必须 display:flex，否则三个元素会堆叠成三行。 */
+.nav-row {
+    display: flex;
+    align-items: center;
+    gap: var(--header-gap);
+}
+
+/* 项目详情页的 nav-meta：显示项目路径，label 级小灰字，可点击复制。
+   左缩进对齐标题（同 is-transcript）。 */
+.nav-bar.is-project .nav-meta {
+    font-size: var(--fs-label);
+    color: var(--fc-caption);
+    padding: 0;
+    margin: var(--header-meta-gap) 0 0 var(--header-title-x);
+    line-height: 1.3;
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+/* nav-bar 内的 section-label margin/padding 已在前面 .nav-bar.is-project
+   .section-label 规则里清零，无需在此重复。 */
+.nav-bar.is-project .nav-meta:hover { color: var(--accent-hover); }
 .nav-bar .back-btn {
     background: none;
     border: none;
     color: var(--text-dim);
     cursor: pointer;
-    width: 28px;
-    height: 28px;
+    /* 与 .section-label > svg 共用同一槽宽，让带返回按钮的子页面和带图标
+       的顶级页主标题文字 left 完全对齐（= --header-title-x）。 */
+    width: var(--header-icon-slot);
+    height: var(--header-icon-slot);
+    /* 不被超长 nav-title 挤压（flex 容器内默认 shrink:1 会跟着收缩）。 */
+    flex-shrink: 0;
+    flex-grow: 0;
     border-radius: var(--radius-sm);
+    /* 强制继承全局字体（button 默认 Arial，导致和页面其他元素字体不一致）。 */
+    font-family: inherit;
     display: flex;
     align-items: center;
     justify-content: center;
     transition: background 0.1s ease, color 0.1s ease;
 }
 .nav-bar .back-btn:hover { color: var(--text); background: var(--bg-hover); }
-.nav-bar .section-label { padding: 0; }
 
 /* ============================ 空状态 ============================ */
 .empty-state {
@@ -1271,9 +1512,11 @@ button:focus-visible { outline-offset: 1px; }
     align-items: center;
     gap: var(--sp-2);
     /* v0.4.25：padding 12→8、margin-bottom 8→6，压缩清理页顶部高度，
-       让摘要条更紧凑、与下方卡片间距（6px）节奏统一。 */
+       让摘要条更紧凑、与下方卡片间距（6px）节奏统一。
+       margin-left/right 归零：对齐 scroll-area 边界（= 卡片边框 = 标题行内容），
+       不再额外缩进（用户反馈黄框宽度没和整体对齐）。 */
     padding: var(--sp-2);
-    margin: 0 var(--sp-2) 6px;
+    margin: 0 0 6px;
     background: var(--warn-soft);
     border: 1px solid rgba(229, 163, 59, 0.25);
     border-radius: var(--radius-md);
@@ -1523,9 +1766,9 @@ button:focus-visible { outline-offset: 1px; }
     margin-left: auto;
     display: inline-flex;
     align-items: stretch;
-    /* 锁死高度 = 单按钮 .section-action 的 24px，确保 split-button 和其他页
-       的单个操作按钮等高（section-label 视觉四页统一的前提）。 */
-    height: 24px;
+    /* 高度锁定 = --header-icon-slot，与单按钮 .section-action 等高，
+       确保 split-button 和返回按钮/图标统一在同一行视觉高度。 */
+    height: var(--header-icon-slot);
     border-radius: var(--radius-sm);
     overflow: hidden;
 }
@@ -1546,6 +1789,218 @@ button:focus-visible { outline-offset: 1px; }
     align-items: center;
     justify-content: center;
 }
+
+/* —— 会话详情页「继续 ▾」split-button ——
+   复用 new-chat-wrap 的 split-button 范式，但用在 nav-bar.is-transcript 的
+   nav-row 里（margin-left:auto 推到右端）。主体=继续会话，▾=菜单。 */
+.resume-wrap {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: stretch;
+    height: var(--header-icon-slot);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+.resume-wrap .section-action {
+    margin-left: 0;
+    border-radius: 0;
+}
+.resume-main { border-right: 1px solid var(--bg-stroke); }
+/* ▾ 箭头：与 .new-chat-caret 完全同一标尺（用户反馈各页 ▾ 尺寸要一致）。 */
+.resume-caret {
+    min-width: 22px;
+    padding: 0 10px;
+    font-size: 11px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+/* 动作菜单（session-menu / projects-menu / workspace-menu / cleanup-menu /
+   archive-menu）的选项文字复用 .ms-tier 槽，但这些是"动作"而非"模型档次"——
+   不该继承 .model-switcher-item .ms-tier 的 600 粗体 + 12.5px + text 亮色。
+   降级为普通菜单项字体：更细、更弱、更小，匹配次要操作的视觉等级。
+   原始模型选择器（.model-switcher 直接子级 .ms-tier）不受影响，仍保持粗体。 */
+.session-menu .ms-tier,
+.projects-menu .ms-tier,
+.workspace-menu .ms-tier,
+.cleanup-menu .ms-tier,
+.archive-menu .ms-tier,
+.conv-menu .ms-tier {
+    min-width: 0;
+    font-weight: 400;
+    font-size: 11.5px;
+    color: var(--text-dim);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* ============================ 散落对话 · 批量清理模式 ============================ */
+/* 进入批量模式后，列表变成"分组 + 复选框"结构，底部固定操作栏。
+   复用现有 .section-label / .scroll-area / .btn 体系，只加批量专属样式。 */
+
+/* 批量模式列表区：不用实色背景（会让 sticky 标题和其他页面不一致）。
+   改用和其他页面一致的毛玻璃，保持标题行背景统一。 */
+.scroll-area.has-batch {
+    background: transparent;
+}
+
+/* 底部固定操作栏：吸在 content 底部（footer 上方），不随列表滚动。
+   高度 48px，背景不透明（Mica 上需要实色保证可读）。 */
+.batch-action-bar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-2);
+    padding: var(--sp-1) var(--gutter-x); /* 横向基准线对齐 footer/titlebar */
+    background: var(--bg-solid);
+    border-top: 1px solid var(--bg-stroke);
+    min-height: 48px;
+}
+.batch-action-bar .batch-selected-count {
+    font-size: var(--fs-meta);
+    color: var(--text-dim);
+}
+.batch-action-bar .batch-actions { display: flex; gap: var(--sp-1); }
+.batch-action-bar .btn { height: 28px; padding: 0 var(--sp-2); font-size: 11.5px; }
+.batch-action-bar .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* 分组头：组名 + 全选复选框 + 计数。sticky 吸顶让用户滚动时仍知道当前分组。
+   毛玻璃机制同 .section-label / .nav-bar：backdrop-filter 常驻避免 toggle 闪烁。 */
+.batch-group { margin-bottom: var(--sp-2); }
+.batch-group-head {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--header-pad-y) 0;
+    color: var(--fc-label);
+    font-size: var(--fs-label);
+    font-weight: var(--fw-label);
+    position: sticky;
+    top: 0;
+    background-color: var(--header-bg-stuck);
+    transform: translateZ(0);
+    z-index: 1;
+}
+.batch-group-select {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+}
+.batch-group-count {
+    color: var(--text-faint);
+    font-weight: 400;
+}
+
+/* 单条会话行：复选框 + 标题 + 时间。hover 给可点反馈。 */
+.batch-item {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: 7px var(--sp-2);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background 0.1s ease;
+}
+.batch-item:hover { background: var(--bg-hover); }
+/* 批量勾选框：自定义外观，不用原生白色背景。
+   未选中=半透明深色框，hover 提亮；选中=accent 实色 + 白勾。 */
+.batch-item .batch-check {
+    flex-shrink: 0;
+    cursor: pointer;
+    width: 15px;
+    height: 15px;
+    appearance: none;
+    -webkit-appearance: none;
+    border: 1.5px solid var(--bg-stroke-strong);
+    border-radius: var(--radius-xs);
+    background: rgba(255, 255, 255, 0.04);
+    transition: background 0.1s ease, border-color 0.1s ease;
+    position: relative;
+    margin: 0;
+}
+.batch-item .batch-check:hover {
+    border-color: var(--accent-border);
+    background: rgba(255, 255, 255, 0.08);
+}
+.batch-item .batch-check:checked {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+/* 选中后的勾，用 CSS 画一个白色对勾。 */
+.batch-item .batch-check:checked::after {
+    content: "";
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 4px;
+    height: 8px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+/* 分组头的全选复选框同款样式（必须设 width/height，否则 appearance:none 后塌缩成点）。 */
+.batch-group-check {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 15px;
+    height: 15px;
+    border: 1.5px solid var(--bg-stroke-strong);
+    border-radius: var(--radius-xs);
+    background: rgba(255, 255, 255, 0.04);
+    transition: background 0.1s ease, border-color 0.1s ease;
+    position: relative;
+    cursor: pointer;
+    margin: 0;
+    flex-shrink: 0;
+}
+.batch-group-check:hover {
+    border-color: var(--accent-border);
+    background: rgba(255, 255, 255, 0.08);
+}
+.batch-group-check:checked {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+.batch-group-check:checked::after {
+    content: "";
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 4px;
+    height: 8px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+/* indeterminate（部分选中）态：显示一个横杠。 */
+.batch-group-check:indeterminate {
+    background: var(--accent-soft);
+    border-color: var(--accent-border);
+}
+.batch-group-check:indeterminate::after {
+    content: "";
+    position: absolute;
+    left: 3px;
+    top: 5px;
+    width: 7px;
+    height: 2px;
+    background: var(--accent);
+    border-radius: 1px;
+}
+.batch-item .batch-title {
+    flex: 1;
+    min-width: 0;
+    font-size: var(--fs-body);
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.batch-item .meta { color: var(--text-faint); font-size: var(--fs-meta); flex-shrink: 0; }
 
 /* 「更改默认目录」菜单：复用 .model-switcher flyout 容器，加一个只读
    "当前目录"信息行。ws-current 不响应点击，纯展示。 */
@@ -1569,7 +2024,7 @@ button:focus-visible { outline-offset: 1px; }
     line-height: 1.35;
 }
 /* 菜单里的「更改默认目录…」项用 ms-tier 当图标+文字容器，去掉 min-width。 */
-.workspace-menu .ws-change .ms-tier {
+.workspace-menu [data-act="change"] .ms-tier {
     min-width: 0;
     display: inline-flex;
     align-items: center;

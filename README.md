@@ -12,7 +12,7 @@
 [![Tauri](https://img.shields.io/badge/Tauri-2.11-FFC131?logo=tauri&logoColor=black)](#architecture)
 [![Rust](https://img.shields.io/badge/Rust-1.96+-CE422B?logo=rust&logoColor=white)](#build-from-source)
 [![TypeScript](https://img.shields.io/badge/TypeScript-native-3178C6?logo=typescript&logoColor=white)](#architecture)
-[![Release](https://img.shields.io/badge/release-v0.5.0-blue?logo=github&logoColor=white)](https://github.com/LUMIAO9527/Cove/releases/latest)
+[![Release](https://img.shields.io/badge/release-v0.6.0-blue?logo=github&logoColor=white)](https://github.com/LUMIAO9527/Cove/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?logo=opensourceinitiative&logoColor=white)](./LICENSE)
 [![No Telemetry](https://img.shields.io/badge/telemetry-none-success)](#runtime-data)
 
@@ -43,13 +43,16 @@
 
 - **Multi-tool support** — Manage **Claude Code** and **Reasonix** side by side. A titlebar capsule switcher picks which tool each page shows; install status is probed automatically.
 - **Projects & conversations** — Lists every conversation grouped by project, with model, message count, size, and first-question summary.
+- **Drag-to-reorder projects** — Reorder project cards by dragging the handle on the left; the order persists across restarts.
 - **Smart titles** — `custom-title` → `ai-title` → `summary` → first user message. Never shows "Untitled".
 - **Soft archive** — Moves a conversation and all its related data to an archive area; fully restorable to the original spot.
 - **True delete** — Permanently removes a conversation plus all 8 related data locations.
 - **Global orphan scan** — Finds every "transcript gone but leftovers remain" orphan across all projects; clean one or many at once.
+- **Batch cleanup by time** — Group scattered conversations by time (recent / this week / this month / older), select a whole group, and archive or delete in one action.
 - **Model display** — Global default model in the top bar, plus the actual model each conversation ran on.
 - **New-conversation launcher** — Launch `claude` in a chosen working directory in one click, with a remembered default directory.
-- **Session history viewer** — Read-only browsing of the full transcript (user/assistant message stream; thinking/tool calls collapsible).
+- **Session history viewer** — Read-only browsing of the full transcript (user/assistant message stream; thinking/tool calls collapsible). Copy the whole conversation or export as Markdown.
+- **Hover action menus** — Each page's title bar has a hover-triggered ▾ menu for quick actions (open data folder, change default workspace, etc.).
 - **Win11 style** — Mica translucency, tray flyout, card enter/slide-out animations, dark theme.
 
 ---
@@ -63,8 +66,8 @@ Grab any of these from [Releases](../../releases):
 | File | Description | Size |
 |------|-------------|------|
 | `Cove.exe` | Portable single file — double-click to run | ~10 MB |
-| `Cove_0.5.0_x64-setup.exe` | NSIS installer | ~2.2 MB |
-| `Cove_0.5.0_x64_en-US.msi` | MSI installer | ~3.5 MB |
+| `Cove_0.6.0_x64-setup.exe` | NSIS installer | ~2.2 MB |
+| `Cove_0.6.0_x64_en-US.msi` | MSI installer | ~3.5 MB |
 
 **Windows 10/11 x64 only.** After install/run, a tray icon appears; click it to pop out the panel.
 

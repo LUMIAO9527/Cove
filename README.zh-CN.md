@@ -12,7 +12,7 @@
 [![Tauri](https://img.shields.io/badge/Tauri-2.11-FFC131?logo=tauri&logoColor=black)](#架构)
 [![Rust](https://img.shields.io/badge/Rust-1.96+-CE422B?logo=rust&logoColor=white)](#从源码构建)
 [![TypeScript](https://img.shields.io/badge/TypeScript-原生-3178C6?logo=typescript&logoColor=white)](#架构)
-[![Release](https://img.shields.io/badge/发布-v0.5.0-blue?logo=github&logoColor=white)](https://github.com/LUMIAO9527/Cove/releases/latest)
+[![Release](https://img.shields.io/badge/发布-v0.6.0-blue?logo=github&logoColor=white)](https://github.com/LUMIAO9527/Cove/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?logo=opensourceinitiative&logoColor=white)](./LICENSE)
 [![No Telemetry](https://img.shields.io/badge/遥测-无-success)](#运行时数据)
 
@@ -43,13 +43,16 @@
 
 - **多工具支持** — 同时管理 **Claude Code** 和 **Reasonix**。顶栏胶囊切换器选择当前工具,各页面只显示该工具的数据;安装状态自动探测。
 - **项目 & 对话管理** — 按项目分组列出所有对话,展示每条对话的模型、消息数、大小、首问摘要。
+- **拖拽排序项目** — 拖动项目卡片左侧的手柄即可重排,顺序在重启后保留。
 - **智能标题** — `custom-title` → `ai-title` → `summary` → 首条用户消息,绝不会出现"无标题"。
 - **软归档** — 把对话及其全部关联数据移到归档区,随时可恢复到原位。
 - **真删除** — 永久删除对话 + 8 处关联数据。
 - **全局孤儿扫描** — 扫描所有"正文已删但附属残留"的孤儿,单项或批量清理。
+- **按时间批量清理** — 散落对话按时间分组(最近/本周/本月/更早),整组勾选后一次性归档或删除。
 - **模型展示** — 顶栏全局默认模型 + 每条对话实际跑过的模型。
 - **新对话启动器** — 在指定工作目录一键启动 `claude`,支持默认目录记忆。
-- **会话历史查看** — 只读浏览完整对话记录(user/assistant 消息流,思考过程/工具调用可折叠)。
+- **会话历史查看** — 只读浏览完整对话记录(user/assistant 消息流,思考过程/工具调用可折叠),可复制整段对话或导出为 Markdown。
+- **hover 操作菜单** — 各页标题行带 hover 触发的 ▾ 菜单,快速执行常用操作(打开数据目录、更改默认工作区等)。
 - **Win11 风格** — Mica 半透明、托盘 flyout、卡片入场/滑出动画、深色主题。
 
 ---
@@ -63,8 +66,8 @@
 | 文件 | 说明 | 大小 |
 |------|------|------|
 | `Cove.exe` | 免安装单文件,双击即用 | ~10 MB |
-| `Cove_0.5.0_x64-setup.exe` | NSIS 安装包 | ~2.2 MB |
-| `Cove_0.5.0_x64_en-US.msi` | MSI 安装包 | ~3.5 MB |
+| `Cove_0.6.0_x64-setup.exe` | NSIS 安装包 | ~2.2 MB |
+| `Cove_0.6.0_x64_en-US.msi` | MSI 安装包 | ~3.5 MB |
 
 **仅支持 Windows 10/11 x64。** 安装/运行后托盘出现图标,点击即弹出面板。
 

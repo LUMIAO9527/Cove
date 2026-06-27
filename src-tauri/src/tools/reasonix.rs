@@ -190,8 +190,18 @@ pub fn parse_transcript(session_path: &PathBuf, sid: &str) -> Option<SessionTran
 }
 
 /// Resolve a Reasonix session path by id (= filename stem).
+/// 回退查归档：活跃 sessions 目录找不到时，查 archive/reasonix/<sid>/<sid>.jsonl。
 pub fn session_path(sid: &str, _project_key: &str) -> Option<PathBuf> {
-    session_path_in(&reasonix_dir(), sid)
+    if let Some(p) = session_path_in(&reasonix_dir(), sid) {
+        return Some(p);
+    }
+    // 回退：归档扁平布局 archive/reasonix/<sid>/<sid>.jsonl
+    let stem = sid.trim_end_matches(".jsonl");
+    let archived = crate::paths::archive_dir()
+        .join("reasonix")
+        .join(stem)
+        .join(format!("{stem}.jsonl"));
+    if archived.exists() { Some(archived) } else { None }
 }
 
 pub(crate) fn session_path_in(home: &Path, sid: &str) -> Option<PathBuf> {

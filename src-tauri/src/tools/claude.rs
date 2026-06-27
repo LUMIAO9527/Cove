@@ -41,13 +41,24 @@ pub fn parse_transcript(session_path: &PathBuf, sid: &str) -> Option<SessionTran
 /// Resolve a Claude session jsonl path: ~/.claude/projects/<encoded>/<sid>.jsonl.
 /// `project_key` is the encoded dir name (NOT cwd — use encode_project_path on
 /// the real cwd before calling if you only have that).
+///
+/// 回退查归档 capsule：活跃目录找不到 jsonl 时，查 `archive_dir()/encoded/sid/transcript.jsonl`。
+/// 让 get_session_transcript / open_session_location 支持归档会话（用户反馈：归档页点不进对话记录）。
 pub fn session_path(sid: &str, project_key: &str) -> Option<PathBuf> {
     let p = claude_dir()
         .join("projects")
         .join(project_key)
         .join(format!("{sid}.jsonl"));
     if p.exists() {
-        Some(p)
+        return Some(p);
+    }
+    // 回退：归档 capsule 布局 archive/<encoded>/<sid>/transcript.jsonl
+    let archived = crate::paths::archive_dir()
+        .join(project_key)
+        .join(sid)
+        .join("transcript.jsonl");
+    if archived.exists() {
+        Some(archived)
     } else {
         None
     }

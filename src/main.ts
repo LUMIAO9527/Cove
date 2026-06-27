@@ -234,7 +234,8 @@ function showSessionDetail(
     projEncoded: string,
     projPath: string,
     sessionTitle: string,
-    onBack: () => void
+    onBack: () => void,
+    isArchived: boolean = false
 ): void {
     void renderSessionDetailView(
         content,
@@ -243,7 +244,8 @@ function showSessionDetail(
         projEncoded,
         projPath,
         sessionTitle,
-        onBack
+        onBack,
+        isArchived
     );
 }
 
@@ -274,7 +276,13 @@ function showArchive(): void {
     const tool = effectiveTool();
     void renderHeader(document.getElementById("titlebar-model")!, tool);
     if (!toolInstalled()) { renderNotInstalledPage(content, tool); return; }
-    renderArchiveView(content, tool);
+    // 归档会话也能点进查看对话记录（返回时回到归档页）。
+    const enterSession = (sid: string, encoded: string, projPath: string, title: string) => {
+        showSessionDetail(sid, encoded, projPath, title, async () => {
+            renderArchiveView(content, tool, enterSession);
+        }, true);
+    };
+    renderArchiveView(content, tool, enterSession);
 }
 
 // View: cleanup (Claude-only; 磁盘清理依赖 Claude 的 ~/.claude 关联数据结构，
@@ -397,3 +405,28 @@ async function restoreInlineExpansion(projectPath: string, sid: string): Promise
 }
 
 void loadInstalledTools().then(() => showProjects());
+
+// ===========================================================================
+// Sticky 标题视觉：滚到非顶端时给 .section-label / .nav-bar 加 .is-stuck，
+// CSS 里 .is-stuck 触发毛玻璃 + 圆角；常态下背景透明，让最顶端不出现底色横条。
+// 实现：MutationObserver 监听 #app 子树，每次出现新的 .scroll-area 就给它
+// 装一个 scroll 监听器；scrollTop>0 → 给区内所有 sticky 元素加 .is-stuck。
+// view 切换会整块替换 #app 内容，旧监听器随 DOM 移除自动失效，无需手动清理。
+// ===========================================================================
+function attachStickyWatcher(scroll: HTMLElement): void {
+    if (scroll.dataset.stickyBound === "1") return;
+    scroll.dataset.stickyBound = "1";
+    const update = (): void => {
+        const stuck = scroll.scrollTop > 0;
+        scroll.querySelectorAll<HTMLElement>(".section-label, .nav-bar").forEach((el) => {
+            el.classList.toggle("is-stuck", stuck);
+        });
+    };
+    scroll.addEventListener("scroll", update, { passive: true });
+    // 初始也跑一次（重渲染后 scrollTop 可能不是 0，如返回时恢复滚动位置）。
+    requestAnimationFrame(update);
+}
+
+new MutationObserver(() => {
+    document.querySelectorAll<HTMLElement>(".scroll-area").forEach(attachStickyWatcher);
+}).observe(app, { childList: true, subtree: true });

@@ -11,7 +11,7 @@ export interface ConfirmOptions {
     /** 风格：danger 红色确认 / warn 橙色 / accent 蓝色（默认） */
     variant?: "danger" | "warn" | "accent";
     /** 标题图标（默认根据 variant 自动选） */
-    titleIcon?: "warn" | "trash" | "terminal";
+    titleIcon?: "warn" | "trash" | "terminal" | "restore" | "archive";
 }
 
 /**

@@ -485,6 +485,9 @@ pub fn list_archived_conversations(archive_root: &Path) -> Vec<Conversation> {
                                 .map(to_unix_millis)
                                 .unwrap_or(0)
                         };
+                        // 标记为归档态（scan.rs 的 parse_single_jsonl 硬编码 false，
+                        // 这里覆盖为 true，让前端查看器能据此隐藏"继续会话"按钮）。
+                        convo.is_archived = true;
                         convos.push(convo);
                     }
                 }

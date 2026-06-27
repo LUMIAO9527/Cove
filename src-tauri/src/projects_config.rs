@@ -177,6 +177,45 @@ fn same_path(a: &str, b: &str) -> bool {
     }
 }
 
+/// Reorder the project list to match `ordered_paths`. The Vec order IS the
+/// display order (前端 get_projects 直接返回它，不再额外排序), so persisting
+/// a new Vec order = persisting a new display order.
+///
+/// 语义：`ordered_paths` 是用户拖拽后的完整路径顺序（前端在 drop 时算好整列新
+/// 顺序传入）。后端按这个顺序重排 cfg.projects；不在列表里的项目（理论不会
+/// 发生，但防御性）保持原相对顺序追加到末尾。长度不匹配 / 全部缺失时拒绝写入
+/// 并报错，避免误清空。
+pub fn reorder(tool: ToolKind, ordered_paths: &[String]) -> Result<(), String> {
+    let mut cfg = load(tool);
+    if ordered_paths.is_empty() {
+        return Err("排序路径列表为空".to_string());
+    }
+    // 校验：ordered_paths 必须是当前 projects 集合的一个排列（元素相同，可缺可多都算错误）。
+    let current_count = cfg.projects.len();
+    if ordered_paths.len() != current_count {
+        return Err(format!(
+            "排序路径数量（{}）与当前项目数（{}）不符",
+            ordered_paths.len(),
+            current_count
+        ));
+    }
+    // 逐个按 ordered_paths 取出，重组 cfg.projects。
+    let old: Vec<ProjectEntry> = std::mem::take(&mut cfg.projects);
+    let mut remaining: Vec<ProjectEntry> = old;
+    let mut reordered: Vec<ProjectEntry> = Vec::with_capacity(current_count);
+    for want in ordered_paths {
+        let pos = remaining.iter().position(|p| same_path(&p.path, want));
+        match pos {
+            Some(i) => reordered.push(remaining.remove(i)),
+            None => return Err(format!("排序中包含未知项目: {}", want)),
+        }
+    }
+    // remaining 此时必为空（长度已校验相等，且每个 want 都命中）。
+    // 理论上 reordered.len() == current_count。
+    cfg.projects = reordered;
+    save(tool, &cfg)
+}
+
 pub fn now_millis() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)

@@ -1,7 +1,7 @@
 import { api, OrphanEntry } from "../api";
 import { icon } from "../styles/icons";
 import { confirmDialog, toast } from "./confirm";
-import { escapeHtml, formatSize } from "./projects";
+import { escapeHtml, formatSize, bindHoverMenu, createAnchoredMenu } from "./projects";
 
 /**
  * 每种孤儿数据的中文说明与安全等级，帮用户判断该不该删。
@@ -71,7 +71,10 @@ export async function renderCleanupView(container: HTMLElement): Promise<void> {
         <div class="scroll-area">
             <div class="section-label">
                 ${icon("broom", 13)} 磁盘清理
-                <button class="btn btn-ghost section-action" id="rescan-btn" title="重新扫描残留数据">${icon("refresh", 14)} 重新扫描</button>
+                <span class="new-chat-wrap" id="cleanup-wrap">
+                    <button class="btn btn-ghost section-action new-chat-main" id="rescan-btn" title="重新扫描残留数据">${icon("refresh", 14)} 重新扫描</button>
+                    <button class="btn btn-ghost section-action new-chat-caret" id="cleanup-caret" title="更多操作">▾</button>
+                </span>
             </div>
             <div id="scan-result" style="padding:0 var(--sp-1);">
                 <div class="loading">正在扫描残留数据…</div>
@@ -82,6 +85,10 @@ export async function renderCleanupView(container: HTMLElement): Promise<void> {
     document.getElementById("rescan-btn")!.addEventListener("click", () => {
         renderCleanupView(container);
     });
+
+    // 「重新扫描 ▾」小箭头菜单：hover 触发。
+    const cleanupCaret = document.getElementById("cleanup-caret");
+    if (cleanupCaret) bindHoverMenu(cleanupCaret, showCleanupMenu);
 
     const orphans = await api.scanOrphans();
     const resultDiv = document.getElementById("scan-result")!;
@@ -184,7 +191,20 @@ function orphansHtml(orphans: OrphanEntry[]): string {
         .join("");
 }
 
-/** （已废弃）删除单项后更新摘要。v0.4.26 起单项删除直接 renderCleanupView
- *  重扫整个视图，不再需要局部更新——摘要和卡片状态天然一致。保留空函数
- *  占位只是为了避免历史调用点报错（实际已无调用点）。 */
-// 注：原函数体已删除；若以后需要局部更新可在此重写。
+// ===========================================================================
+// 清理页「重新扫描 ▾」小箭头菜单（split-button 的 ▾）
+// 当前只一项：打开 ~/.claude 数据目录（方便用户手动查看残留文件）。
+// ===========================================================================
+
+/** 清理页「▾」菜单（hover 触发）。 */
+function showCleanupMenu(anchor: HTMLElement): HTMLElement {
+    return createAnchoredMenu(anchor, "cleanup-menu", `
+        <button class="model-switcher-item" type="button" data-act="open-dir">
+            <span class="ms-tier">${icon("folder", 14)} 打开数据目录…</span>
+        </button>`, {
+        "open-dir": async () => {
+            try { await api.openAppDataDir("claude"); }
+            catch (err) { toast("打开失败：" + String(err)); }
+        },
+    });
+}

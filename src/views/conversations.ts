@@ -1,7 +1,7 @@
-import { api, Project, ToolName } from "../api";
+import { api, Project, Conversation, ToolName } from "../api";
 import { icon } from "../styles/icons";
-import { toast, selectDialog, promptDialog } from "./confirm";
-import { escapeHtml, formatSize, formatTime, showConvoInfo, bindCopyable, animateRemoveCard } from "./projects";
+import { toast, selectDialog } from "./confirm";
+import { escapeHtml, formatSize, formatTime, showConvoInfo, animateRemoveCard, bindHoverMenu, renameSessionPrompt, createAnchoredMenu } from "./projects";
 
 /** Project detail: historical sessions for one project (precise, encode-based). */
 export async function renderConversationsView(
@@ -15,16 +15,18 @@ export async function renderConversationsView(
 
     container.innerHTML = `
         <div class="scroll-area">
-            <div class="nav-bar is-project">
-                <button class="back-btn" id="back-btn">${icon("back", 18)}</button>
-                <span class="section-label">${escapeHtml(project.name)}</span>
-                <button class="btn btn-ghost section-action" id="new-session-btn" title="在此项目开新会话">
-                    ${icon("plus", 14)} 新开会话
-                </button>
-            </div>
-            <div class="path-bar">
-                <span class="path-chip copyable" data-copy-text="${escapeHtml(project.path)}" title="点击复制路径">${icon("folder", 13)}<span class="path-chip-text">${escapeHtml(project.path)}</span></span>
-                <button class="btn btn-ghost path-open-btn" id="open-folder-btn" title="在文件资源管理器中打开">${icon("folder", 13)} 打开文件夹</button>
+            <div class="nav-bar is-project" style="display:block">
+                <div class="nav-row">
+                    <button class="back-btn" id="back-btn">${icon("back", 13)}</button>
+                    <span class="section-label" style="flex:1;min-width:0">${escapeHtml(project.name)}</span>
+                    <span class="new-chat-wrap" style="flex-shrink:0">
+                        <button class="btn btn-ghost section-action new-chat-main" id="new-session-btn" title="在此项目开新会话">
+                            ${icon("plus", 14)} 新开会话
+                        </button>
+                        <button class="btn btn-ghost section-action new-chat-caret" id="conv-caret" title="更多操作">▾</button>
+                    </span>
+                </div>
+                <div class="nav-meta" id="proj-path" title="点击复制路径">${escapeHtml(project.path)}</div>
             </div>
             ${
                 convos.length === 0
@@ -69,14 +71,17 @@ export async function renderConversationsView(
 
     document.getElementById("back-btn")!.addEventListener("click", onBack);
 
-    // 路径 chip：点击复制完整路径（复用 projects.ts 的 bindCopyable）。
-    bindCopyable(container);
-    // 打开文件夹：在系统资源管理器中打开项目目录。
-    document.getElementById("open-folder-btn")?.addEventListener("click", async () => {
+    // ▾ hover 菜单：打开文件夹 / 批量清理。
+    const convCaret = document.getElementById("conv-caret");
+    if (convCaret) bindHoverMenu(convCaret, (anchor) => showConvMenu(anchor, project, convos, container, tool, onBack, onSelectSession));
+
+    // 路径小灰字：点击复制项目路径（像 info 浮层那样）。
+    document.getElementById("proj-path")?.addEventListener("click", async () => {
         try {
-            await api.openInExplorer(project.path);
-        } catch (err) {
-            toast("打开失败：" + String(err));
+            await navigator.clipboard.writeText(project.path);
+            toast("已复制项目路径");
+        } catch {
+            toast("复制失败");
         }
     });
 
@@ -94,12 +99,19 @@ export async function renderConversationsView(
     });
 
     // Info button => hover flyout with session metadata.
+    // 传 onRename：复用本卡片已有的 convo-action rename 逻辑，让 info 浮层也能改名。
     container.querySelectorAll<HTMLElement>(".sub-info-btn").forEach((btn) => {
         btn.addEventListener("click", (e) => e.stopPropagation());
         const card = btn.closest(".sub-session") as HTMLElement;
         const sid = card?.dataset.sid!;
         const convo = convos.find((c) => c.id === sid);
-        if (convo) showConvoInfo(btn, convo);
+        if (convo) {
+            const onRename = () => renameSessionPrompt(
+                tool, sid, project.encoded_name,
+                card?.querySelector<HTMLElement>(".sub-title")
+            );
+            showConvoInfo(btn, convo, onRename);
+        }
     });
 
     // New session in this project
@@ -129,25 +141,10 @@ export async function renderConversationsView(
 
             if (action === "rename") {
                 const card = btn.closest(".card") as HTMLElement;
-                const titleEl = card?.querySelector<HTMLElement>(".sub-title");
-                const currentTitle = titleEl?.textContent?.trim() ?? "";
-                const name = await promptDialog({
-                    title: "重命名会话",
-                    body: "新名字将写入对话记录，<span class='mono'>claude /resume</span> 列表会显示这个名字。",
-                    placeholder: "输入新会话名",
-                    initialValue: currentTitle,
-                    confirmText: "重命名",
-                });
-                if (!name || !name.trim()) return;
-                try {
-                    const newName = await api.renameSession(tool, sid, encoded, name);
-                    // Update the card title in-place; a refresh would also work
-                    // but this keeps scroll position and feels instant.
-                    if (titleEl) titleEl.textContent = newName;
-                    toast("已重命名为：" + newName);
-                } catch (err) {
-                    toast("重命名失败：" + String(err));
-                }
+                await renameSessionPrompt(
+                    tool, sid, encoded,
+                    card?.querySelector<HTMLElement>(".sub-title")
+                );
                 return;
             }
 
@@ -210,5 +207,46 @@ export async function renderConversationsView(
                 if (success) toast("已归档会话");
             }
         });
+    });
+}
+
+// ===========================================================================
+// 项目详情页「新开会话 ▾」hover 菜单
+// 打开文件夹 / 复制项目路径 / 按时间批量清理（复用 loose.ts 的 renderBatchCleanView）
+// ===========================================================================
+
+function showConvMenu(
+    anchor: HTMLElement,
+    project: Project,
+    convos: Conversation[],
+    container: HTMLElement,
+    tool: ToolName,
+    onBack: () => void,
+    onSelectSession: (sid: string, encoded: string, projPath: string, title: string) => void
+): HTMLElement {
+    const hasConvos = convos.length > 0;
+    return createAnchoredMenu(anchor, "conv-menu", `
+        <button class="model-switcher-item" type="button" data-act="open-folder">
+            <span class="ms-tier">${icon("folder", 14)} 打开文件夹</span>
+        </button>
+        <button class="model-switcher-item" type="button" data-act="batch" ${hasConvos ? "" : "disabled"}>
+            <span class="ms-tier">${icon("broom", 14)} 按时间批量清理…</span>
+        </button>`, {
+        "open-folder": async () => {
+            try { await api.openInExplorer(project.path); }
+            catch (err) { toast("打开失败：" + String(err)); }
+        },
+        "batch": () => {
+            if (!hasConvos) return;
+            import("./loose").then(({ renderBatchCleanView }) => {
+                renderBatchCleanView(
+                    container,
+                    tool,
+                    convos,
+                    onSelectSession,
+                    () => renderConversationsView(container, tool, project, onBack, onSelectSession)
+                );
+            });
+        },
     });
 }

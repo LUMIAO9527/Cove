@@ -15,18 +15,18 @@ use tauri::Manager;
 // ---------------------------------------------------------------------------
 
 /// List all registered projects for `tool`, each enriched with live conversation stats.
+///
+/// 顺序：直接按配置文件 Vec 的存储顺序返回（= 用户拖拽后的顺序）。不再按
+/// added_at 排序——那样会覆盖用户拖拽得到的自定义顺序。配置 Vec 由 add 的
+/// insert(0) 维持"最新在前"作为默认，用户拖拽后 Vec 顺序即显示顺序。
 #[tauri::command]
 pub fn get_projects(tool: String) -> Vec<Project> {
     let tool = ToolKind::from_name(&tool);
     let cfg = projects_config::load(tool);
-    let mut out: Vec<Project> = cfg
-        .projects
+    cfg.projects
         .iter()
         .map(|e| entry_to_project(tool, e))
-        .collect();
-    // most recently added first (config already keeps newest first, but sort defensively)
-    out.sort_by(|a, b| b.added_at.cmp(&a.added_at));
-    out
+        .collect()
 }
 
 /// Register a new project by its real working directory, under `tool`.
@@ -58,6 +58,15 @@ pub fn rename_project(tool: String, path: String, name: String) -> Result<Projec
     }
     let entry = projects_config::rename(tool, &path, Some(trimmed.to_string()))?;
     Ok(entry_to_project(tool, &entry))
+}
+
+/// Reorder the project list to match `ordered_paths` (the full new order after
+/// a drag-drop). Persists to config; the new order is reflected on next
+/// get_projects. 前端拖拽完成后调用，传入整列新顺序的路径数组。
+#[tauri::command]
+pub fn reorder_projects(tool: String, ordered_paths: Vec<String>) -> Result<(), String> {
+    let tool = ToolKind::from_name(&tool);
+    projects_config::reorder(tool, &ordered_paths)
 }
 
 /// Detail view: conversations for a single project (precise, encode-based for
@@ -499,6 +508,27 @@ pub fn open_install_terminal() -> Result<(), String> {
     }
 }
 
+/// Open one of Cove's data directories in the system file explorer. `which`:
+///  - "claude"   → ~/.claude（磁盘清理页/项目页的"打开数据目录"）
+///  - "projects" → ~/.claude/projects（项目页的"打开数据目录"，定位到项目根）
+///  - "archive"  → ~/.claude-managed/archive（归档页的"打开归档目录"）
+/// 统一一个命令覆盖三个页面的"打开目录"需求，避免每页加一个命令。
+#[tauri::command]
+pub fn open_app_data_dir(which: String) -> Result<(), String> {
+    let dir = match which.as_str() {
+        "claude" => crate::paths::claude_dir(),
+        "projects" => crate::paths::claude_dir().join("projects"),
+        "archive" => crate::paths::archive_dir(),
+        other => return Err(format!("未知目录类型: {}", other)),
+    };
+    if !dir.exists() {
+        // 归档目录可能还没创建（从未归档过），projects/claude 一定存在。
+        // 对不存在的目录，尝试创建后再打开（避免"目录不存在"报错）。
+        std::fs::create_dir_all(&dir).map_err(|e| format!("创建目录失败: {e}"))?;
+    }
+    open_in_explorer(dir.to_string_lossy().to_string())
+}
+
 /// Hide the main window. Called by the frontend AFTER its close animation
 /// finishes — this is the real "hide" that follows the slide-out animation.
 #[tauri::command]
@@ -638,14 +668,14 @@ pub fn rename_session(
         return Err(format!("找不到会话文件: {}", jsonl.display()));
     }
 
-    // Escape the title for JSON (handles quotes, backslashes, newlines, etc).
-    let escaped = serde_json::Value::String(trimmed.to_string())
-        .to_string();
-    // escaped includes surrounding quotes, e.g. "\"模型能力排名\""
-    let line = format!(
-        "{{\"type\":\"custom-title\",\"customTitle\":{},\"sessionId\":\"{}\"}}\n",
-        escaped, sid
-    );
+    // 用 serde_json::json! 构造整行，sid 和 title 都自动正确转义
+    // （之前 sid 裸插值，若含引号/反斜杠会破坏 JSON 行）。
+    let line = serde_json::json!({
+        "type": "custom-title",
+        "customTitle": trimmed,
+        "sessionId": sid,
+    }).to_string()
+        + "\n";
 
     // Append (Open + Append). Using append mode so we don't load the whole file.
     use std::io::Write;
@@ -673,6 +703,55 @@ pub fn get_session_transcript(
         .ok_or_else(|| format!("找不到会话文件: {sid}"))?;
     tool.parse_transcript(&jsonl, &sid)
         .ok_or_else(|| format!("读取会话失败: {}", jsonl.display()))
+}
+
+/// Open the directory containing a session's jsonl in the system file explorer.
+/// Used by the session-detail page's ▾ menu ("在文件夹打开"). Locates the jsonl
+/// the same way get_session_transcript does, then opens its parent dir.
+#[tauri::command]
+pub fn open_session_location(
+    tool: String,
+    sid: String,
+    project_key: String,
+) -> Result<(), String> {
+    let tool = ToolKind::from_name(&tool);
+    let jsonl = tool
+        .session_path(&sid, &project_key)
+        .ok_or_else(|| format!("找不到会话文件: {sid}"))?;
+    // 打开 jsonl 所在目录（父目录），而非文件本身——explorer 打开文件会
+    // 用默认程序打开它，不是定位到资源管理器。
+    let dir = jsonl
+        .parent()
+        .ok_or_else(|| "无法解析会话文件所在目录".to_string())?;
+    if !dir.exists() {
+        return Err(format!("目录不存在: {}", dir.display()));
+    }
+    open_in_explorer(dir.to_string_lossy().to_string())
+}
+
+/// Save text content to a file path (from a save dialog). Used by the
+/// session-detail page's ▾ menu ("导出为 .md"). Plain atomic write — the
+/// frontend supplies both the path (user-chosen via save dialog) and content.
+///
+/// 路径安全：正常流程路径来自原生 save 对话框（用户自选），但 IPC 层无强制保证，
+/// 故做深度防御——只允许写到用户目录下、且后缀必须是 .md/.txt，避免被污染前端
+/// 用来覆写系统文件。
+#[tauri::command]
+pub fn save_text_file(path: String, content: String) -> Result<(), String> {
+    let p = std::path::PathBuf::from(&path);
+    // 后缀白名单：只允许文本导出格式。
+    let allowed = p
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| matches!(e.to_lowercase().as_str(), "md" | "txt"))
+        .unwrap_or(false);
+    if !allowed {
+        return Err("只允许保存为 .md 或 .txt 文件".to_string());
+    }
+    if let Some(parent) = p.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    crate::archive::atomic_write(&p, content).map_err(|e| e.to_string())
 }
 
 #[cfg(target_os = "windows")]

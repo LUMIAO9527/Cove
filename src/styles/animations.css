@@ -26,7 +26,6 @@
     }
 }
 
-/* 滚动平滑 */
-.scroll-area {
-    scroll-behavior: smooth;
-}
+/* scroll-behavior: smooth 已移除——它让滚动 sticky 元素的 backdrop-filter
+   在动画中间帧重建，肉眼可见"先闪再黑"。 scrollIntoView 自身可以传 behavior
+   选项手动指定 smooth，不需要全局开。 */

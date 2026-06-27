@@ -118,6 +118,9 @@ export const api = {
         invoke<boolean>("remove_project", { tool, path }),
     renameProject: (tool: ToolName, path: string, name: string) =>
         invoke<Project>("rename_project", { tool, path, name }),
+    /** Reorder projects to match `orderedPaths` (full new order after a drag-drop). */
+    reorderProjects: (tool: ToolName, orderedPaths: string[]) =>
+        invoke<void>("reorder_projects", { tool, orderedPaths }),
     getProjectDetail: (tool: ToolName, path: string) =>
         invoke<Conversation[]>("get_project_detail", { tool, path }),
     getLooseConversations: (tool: ToolName) =>
@@ -162,6 +165,12 @@ export const api = {
         invoke<string>("rename_session", { tool, sid, projectEncoded: projectKey, name }),
     getTranscript: (tool: ToolName, sid: string, projectKey: string) =>
         invoke<SessionTranscript>("get_session_transcript", { tool, sid, projectKey }),
+    /** Open the folder containing a session's jsonl in the file explorer. */
+    openSessionLocation: (tool: ToolName, sid: string, projectKey: string) =>
+        invoke<void>("open_session_location", { tool, sid, projectKey }),
+    /** Save text content to a path (from a save dialog). */
+    saveTextFile: (path: string, content: string) =>
+        invoke<void>("save_text_file", { path, content }),
 
     // Tell the backend a native dialog (folder picker) is open so it doesn't
     // treat the OS-induced focus loss as "click outside" and collapse the popup.
@@ -180,6 +189,9 @@ export const api = {
     // Open a folder in the system file explorer (Windows Explorer).
     openInExplorer: (path: string) =>
         invoke<void>("open_in_explorer", { path }),
+    /** Open one of Cove's data dirs ("claude" | "projects" | "archive"). */
+    openAppDataDir: (which: string) =>
+        invoke<void>("open_app_data_dir", { which }),
 
     // Open a blank terminal at the user's home dir (for pasting+running an
     // install command copied from the "未安装" page). Decoupled from the copy
