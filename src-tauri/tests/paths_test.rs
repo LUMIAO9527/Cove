@@ -38,18 +38,18 @@ fn test_decode_c_drive() {
 fn test_encode_strips_verbatim_prefix() {
     // The exact value canonicalize produces on Windows:
     assert_eq!(
-        encode_project_path(r"\\?\D:\Programs\Projects\Brains"),
-        "D--Programs-Projects-Brains"
+        encode_project_path(r"\\?\D:\Programs\Brains"),
+        "D--Programs-Brains"
     );
     // Forward-slash verbatim variant too:
     assert_eq!(
-        encode_project_path(r"\\?\D:/Programs/Projects/Brains"),
-        "D--Programs-Projects-Brains"
+        encode_project_path(r"\\?\D:/Programs/Brains"),
+        "D--Programs-Brains"
     );
     // No prefix — unchanged behavior:
     assert_eq!(
-        encode_project_path(r"D:\Programs\Projects\Brains"),
-        "D--Programs-Projects-Brains"
+        encode_project_path(r"D:\Programs\Brains"),
+        "D--Programs-Brains"
     );
     // `\\.\` device prefix also stripped:
     assert_eq!(
