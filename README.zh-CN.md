@@ -6,7 +6,7 @@
 
 `系统托盘` · `flyout 面板` · `无遥测` · `纯本地`
 
-<sub>像管理邮件一样管理你的 Claude Code 对话 —— 干净、可归档、不留孤儿。</sub>
+<sub>让 Claude Code 工作区保持整洁 —— 项目、对话、完整历史、残留，全在一个托盘面板里管。</sub>
 
 [![Windows](https://img.shields.io/badge/平台-Windows%2010%2F11%20x64-0078D4?logo=windows11&logoColor=white)](#安装)
 [![Tauri](https://img.shields.io/badge/Tauri-2.11-FFC131?logo=tauri&logoColor=black)](#架构)
@@ -16,7 +16,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?logo=opensourceinitiative&logoColor=white)](./LICENSE)
 [![No Telemetry](https://img.shields.io/badge/遥测-无-success)](#运行时数据)
 
-**其他语言:** &nbsp;[English](./README.md) · [日本語](./README.ja.md) · [Español](./README.es.md) · [Français](./README.fr.md) · [Deutsch](./README.de.md) · [Português (BR)](./README.pt-BR.md) · [Русский](./README.ru.md) · [한국어](./README.ko.md)
+**其他语言:** &nbsp;[English](./README.md)
 
 </div>
 
@@ -43,6 +43,7 @@
 
 - **多工具支持** — 同时管理 **Claude Code** 和 **Reasonix**。顶栏胶囊切换器选择当前工具,各页面只显示该工具的数据;安装状态自动探测。
 - **项目 & 对话管理** — 按项目分组列出所有对话,展示每条对话的模型、消息数、大小、首问摘要。
+- **会话历史查看** — 只读浏览完整对话记录(user/assistant 消息流,思考过程/工具调用可折叠),可复制整段对话或导出为 Markdown。
 - **拖拽排序项目** — 拖动项目卡片左侧的手柄即可重排,顺序在重启后保留。
 - **智能标题** — `custom-title` → `ai-title` → `summary` → 首条用户消息,绝不会出现"无标题"。
 - **软归档** — 把对话及其全部关联数据移到归档区,随时可恢复到原位。
@@ -51,7 +52,6 @@
 - **按时间批量清理** — 散落对话按时间分组(最近/本周/本月/更早),整组勾选后一次性归档或删除。
 - **模型展示** — 顶栏全局默认模型 + 每条对话实际跑过的模型。
 - **新对话启动器** — 在指定工作目录一键启动 `claude`,支持默认目录记忆。
-- **会话历史查看** — 只读浏览完整对话记录(user/assistant 消息流,思考过程/工具调用可折叠),可复制整段对话或导出为 Markdown。
 - **hover 操作菜单** — 各页标题行带 hover 触发的 ▾ 菜单,快速执行常用操作(打开数据目录、更改默认工作区等)。
 - **Win11 风格** — Mica 半透明、托盘 flyout、卡片入场/滑出动画、深色主题。
 

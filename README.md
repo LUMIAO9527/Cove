@@ -6,7 +6,7 @@
 
 `system tray` · `flyout panel` · `no telemetry` · `local only`
 
-<sub>Treat your Claude Code conversations like email — clean, archived, never orphaned.</sub>
+<sub>Keep your Claude Code workspace tidy — projects, conversations, full history, and leftovers, all in one tray panel.</sub>
 
 [![Windows](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-0078D4?logo=windows11&logoColor=white)](#install)
 [![Tauri](https://img.shields.io/badge/Tauri-2.11-FFC131?logo=tauri&logoColor=black)](#architecture)
@@ -16,7 +16,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?logo=opensourceinitiative&logoColor=white)](./LICENSE)
 [![No Telemetry](https://img.shields.io/badge/telemetry-none-success)](#runtime-data)
 
-**Read this in another language:** &nbsp;[简体中文](./README.zh-CN.md) · [日本語](./README.ja.md) · [Español](./README.es.md) · [Français](./README.fr.md) · [Deutsch](./README.de.md) · [Português (BR)](./README.pt-BR.md) · [Русский](./README.ru.md) · [한국어](./README.ko.md)
+**Read this in another language:** &nbsp;[简体中文](./README.zh-CN.md)
 
 </div>
 
@@ -43,6 +43,7 @@
 
 - **Multi-tool support** — Manage **Claude Code** and **Reasonix** side by side. A titlebar capsule switcher picks which tool each page shows; install status is probed automatically.
 - **Projects & conversations** — Lists every conversation grouped by project, with model, message count, size, and first-question summary.
+- **Session history viewer** — Read-only browsing of the full transcript (user/assistant message stream; thinking/tool calls collapsible). Copy the whole conversation or export as Markdown.
 - **Drag-to-reorder projects** — Reorder project cards by dragging the handle on the left; the order persists across restarts.
 - **Smart titles** — `custom-title` → `ai-title` → `summary` → first user message. Never shows "Untitled".
 - **Soft archive** — Moves a conversation and all its related data to an archive area; fully restorable to the original spot.
@@ -51,7 +52,6 @@
 - **Batch cleanup by time** — Group scattered conversations by time (recent / this week / this month / older), select a whole group, and archive or delete in one action.
 - **Model display** — Global default model in the top bar, plus the actual model each conversation ran on.
 - **New-conversation launcher** — Launch `claude` in a chosen working directory in one click, with a remembered default directory.
-- **Session history viewer** — Read-only browsing of the full transcript (user/assistant message stream; thinking/tool calls collapsible). Copy the whole conversation or export as Markdown.
 - **Hover action menus** — Each page's title bar has a hover-triggered ▾ menu for quick actions (open data folder, change default workspace, etc.).
 - **Win11 style** — Mica translucency, tray flyout, card enter/slide-out animations, dark theme.
 
