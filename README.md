@@ -8,6 +8,10 @@
 
 <sub>Keep your Claude Code workspace tidy — projects, conversations, full history, and leftovers, all in one tray panel.</sub>
 
+### ⬇️ [Download Cove.exe](https://github.com/LUMIAO9527/Cove/releases/latest/download/Cove.exe)  ·  [📦 All versions](https://github.com/LUMIAO9527/Cove/releases/latest)
+
+*Portable single file (~10 MB), double-click to run. Windows 10/11 x64 only.*
+
 [![Windows](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-0078D4?logo=windows11&logoColor=white)](#install)
 [![Tauri](https://img.shields.io/badge/Tauri-2.11-FFC131?logo=tauri&logoColor=black)](#architecture)
 [![Rust](https://img.shields.io/badge/Rust-1.96+-CE422B?logo=rust&logoColor=white)](#build-from-source)

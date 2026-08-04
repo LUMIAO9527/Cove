@@ -8,6 +8,10 @@
 
 <sub>让 Claude Code 工作区保持整洁 —— 项目、对话、完整历史、残留，全在一个托盘面板里管。</sub>
 
+### ⬇️ [下载 Cove.exe](https://github.com/LUMIAO9527/Cove/releases/latest/download/Cove.exe)  ·  [📦 全部版本](https://github.com/LUMIAO9527/Cove/releases/latest)
+
+*免安装单文件（约 10 MB），双击即用。仅支持 Windows 10/11 x64。*
+
 [![Windows](https://img.shields.io/badge/平台-Windows%2010%2F11%20x64-0078D4?logo=windows11&logoColor=white)](#安装)
 [![Tauri](https://img.shields.io/badge/Tauri-2.11-FFC131?logo=tauri&logoColor=black)](#架构)
 [![Rust](https://img.shields.io/badge/Rust-1.96+-CE422B?logo=rust&logoColor=white)](#从源码构建)
