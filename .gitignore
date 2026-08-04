@@ -45,18 +45,11 @@ dist-ssr
 # Windows reserved-name junk from errant "cmd > nul" redirects
 /nul
 
-# 评审临时产物：三轮挑刺式评审的 prompt + 三模型原始输出。
-# 评审报告的精华已在 HANDOFF.md 第八节版本历史里，原始输出留在本地备查。
+# 本地评审输出。
 /_review_tmp/
 
-# 开发私档（含本机路径、调试过程、环境清单、设计讨论）——不公开，仅本地保留。
-/HANDOFF.md
-/LOG.md
-/ENVIRONMENT.md
-/docs/
-
-# 发布用 banner：通过 GitHub Release API 单独上传到 Release，不进代码仓库。
-/dist-release/cove-banner.png
+# 开发私档、历史记录和设计过程统一放在 wip/，不进入公开仓库。
+/wip/
 
 # 本地 GitHub 凭证（token 等），永不提交。
 /.github-credentials.local

@@ -164,7 +164,7 @@ function claudeGlyph(): string {
     </svg>`;
 }
 
-/** Reasonix 官方品牌 mark（docs/logo.svg 的同心菱形，静态无动画版）。
+/** Reasonix 品牌 mark 的静态同心菱形版本。
  *  品牌渐变 cyan→blue→violet；未选中时用 currentColor 跟随文字色。 */
 function reasonixGlyph(): string {
     return `<svg class="tool-glyph tool-glyph-reasonix" viewBox="0 0 92 92" width="14" height="14" aria-hidden="true">

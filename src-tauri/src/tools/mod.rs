@@ -4,7 +4,7 @@
 //! scan / transcript / launch are implemented per tool module. Archive /
 //! cleanup / related remain Claude-only (see `tools::claude`).
 //!
-//! See HANDOFF.md §"多 CLI 工具管理" for the design and the per-tool data facts.
+//! Each adapter owns its tool's data layout, installation probe, and launch behavior.
 
 pub mod claude;
 pub mod reasonix;
