@@ -26,6 +26,18 @@ Cove 把项目、对话、归档和清理功能集中到一个紧凑的系统托
 - 扫描 Claude Code 中正文已删除但附属数据仍残留的项目。
 - 按时间分组批量归档或删除对话。
 
+## 界面
+
+| 预览 | 功能说明 |
+| :---: | --- |
+| <img src="./assets/screenshots/01-projects.png" alt="Cove 项目列表" width="260"> | **项目管理**：添加本地工作区、打开数据目录，并在托盘面板中调整项目顺序。 |
+| <img src="./assets/screenshots/02-conversations.png" alt="Cove 对话列表" width="260"> | **对话列表**：按标题、模型、消息数、大小和时间浏览项目中的会话。 |
+| <img src="./assets/screenshots/03-cleanup.png" alt="Cove 残留清理" width="260"> | **残留清理**：删除前查看 Claude Code 关联残留及 Cove 给出的安全分类。 |
+| <img src="./assets/screenshots/04-archive.png" alt="Cove 归档区" width="260"> | **归档恢复**：查看已归档会话，并将其恢复到原始位置。 |
+| <img src="./assets/screenshots/05-models.png" alt="Cove 模型配置" width="260"> | **模型配置**：查看并切换 Claude Code 各模型档位当前使用的模型。 |
+| <img src="./assets/screenshots/06-session-detail.png" alt="Cove 会话详情" width="260"> | **会话详情**：阅读完整对话、展开或折叠思考过程，并继续会话。 |
+| <img src="./assets/screenshots/07-reasonix.png" alt="Cove Reasonix 检测" width="260"> | **Reasonix**：检测 Reasonix 是否已经安装；未安装时显示安装指引。 |
+
 ## 安装
 
 下载 [`Cove.exe`](https://github.com/LUMIAO9527/Cove/releases/latest/download/Cove.exe) 后直接运行。目前支持 Windows 10/11 x64。

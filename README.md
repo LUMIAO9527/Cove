@@ -26,6 +26,18 @@ Cove keeps projects, conversations, archives, and cleanup tools in a compact sys
 - Find Claude Code leftovers whose main transcript has already been removed.
 - Batch archive or delete conversations by time group.
 
+## Screenshots
+
+| Preview | What it shows |
+| :---: | --- |
+| <img src="./assets/screenshots/01-projects.png" alt="Cove project list" width="260"> | **Projects** — Add local workspaces, open their data folders, and reorder them from the tray panel. |
+| <img src="./assets/screenshots/02-conversations.png" alt="Cove conversation list" width="260"> | **Conversations** — Browse a project's sessions with title, model, message count, size, and age. |
+| <img src="./assets/screenshots/03-cleanup.png" alt="Cove cleanup scan" width="260"> | **Cleanup** — Review Claude Code leftovers and Cove's safety classification before removing them. |
+| <img src="./assets/screenshots/04-archive.png" alt="Cove archive" width="260"> | **Archive** — Review archived conversations and restore them to their original location. |
+| <img src="./assets/screenshots/05-models.png" alt="Cove model configuration" width="260"> | **Model configuration** — Inspect and switch the configured model for each Claude Code model tier. |
+| <img src="./assets/screenshots/06-session-detail.png" alt="Cove session detail" width="260"> | **Session detail** — Read the full transcript, expand or collapse thinking sections, and continue a session. |
+| <img src="./assets/screenshots/07-reasonix.png" alt="Cove Reasonix detection" width="260"> | **Reasonix** — Detect whether Reasonix is installed and show installation guidance when it is unavailable. |
+
 ## Install
 
 Download [`Cove.exe`](https://github.com/LUMIAO9527/Cove/releases/latest/download/Cove.exe) and run it directly. Cove currently supports Windows 10/11 x64.
